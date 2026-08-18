@@ -24,7 +24,6 @@ class AccountActivity : Activity() {
     private val dark = Color.rgb(35, 35, 35)
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
-    private fun money(v: Int) = String.format("%,d", v).replace(',', '.') + "đ"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,16 +66,17 @@ class AccountActivity : Activity() {
         setOnClickListener { action() }
     }
 
+    private fun token(): String? = getSharedPreferences("com11h_secure", Context.MODE_PRIVATE).getString("token", null)
+
     private fun request(action: String): JSONObject {
-        val prefs = getSharedPreferences("com11h_secure", Context.MODE_PRIVATE)
-        val token = prefs.getString("token", null) ?: throw IllegalStateException("Chưa đăng nhập")
+        val authToken = token() ?: throw IllegalStateException("Chưa đăng nhập")
         val url = URL("https://com11h.com/api/index.php?action=${URLEncoder.encode(action, "UTF-8")}")
         val c = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = 12000
             readTimeout = 15000
             setRequestProperty("Accept", "application/json")
-            setRequestProperty("Authorization", "Bearer $token")
+            setRequestProperty("Authorization", "Bearer $authToken")
         }
         return try {
             val code = c.responseCode
@@ -88,6 +88,24 @@ class AccountActivity : Activity() {
     private fun showAccount() {
         setContentView(shell())
         root.addView(label("👤 Tài khoản COM11H", 25f, true))
+
+        // AccountActivity is opened directly from the new Home shell. If the customer
+        // has not logged in on this installation yet, do not call the API and then show
+        // a confusing network error. Send the customer to the existing login screen.
+        if (token().isNullOrBlank()) {
+            root.addView(label("Bạn chưa đăng nhập tài khoản COM11H.", 18f, true))
+            root.addView(label("Hãy đăng nhập để xem điểm tích lũy, đơn hàng và mã quay thưởng được đồng bộ từ website.", 15f))
+            root.addView(button("🔐 Đăng nhập / Đăng ký") {
+                startActivity(Intent(this, MainActivity::class.java).putExtra("screen", "profile"))
+                finish()
+            })
+            root.addView(button("🏠 Trang chủ") {
+                startActivity(Intent(this, HomeActivity::class.java))
+                finish()
+            })
+            return
+        }
+
         val loading = label("Đang đồng bộ tài khoản, đơn hàng và mã quay thưởng...", 16f)
         root.addView(loading)
 
@@ -98,9 +116,8 @@ class AccountActivity : Activity() {
                 runOnUiThread {
                     root.removeView(loading)
                     if (!profile.optBoolean("ok")) {
-                        Toast.makeText(this, profile.optString("message", "Phiên đăng nhập đã hết hạn"), Toast.LENGTH_LONG).show()
-                        startActivity(Intent(this, MainActivity::class.java).putExtra("screen", "profile"))
-                        finish()
+                        getSharedPreferences("com11h_secure", Context.MODE_PRIVATE).edit().remove("token").apply()
+                        showAccount()
                         return@runOnUiThread
                     }
                     renderAccount(profile.getJSONObject("data").getJSONObject("customer"), orders)
