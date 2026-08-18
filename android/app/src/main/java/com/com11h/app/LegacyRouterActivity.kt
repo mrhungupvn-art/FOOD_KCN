@@ -10,10 +10,20 @@ class LegacyRouterActivity : Activity() {
         super.onCreate(savedInstanceState)
         val screen = intent.getStringExtra("screen")
         when (screen) {
-            "menu" -> startActivity(Intent(this, MenuActivity::class.java))
+            // Shopping is intentionally routed to the live website so the app and web
+            // use the same menu, cart, account and order business rules.
+            "menu" -> startActivity(
+                Intent(this, WebActivity::class.java)
+                    .putExtra("url", "https://com11h.com/menu.php")
+            )
             "profile" -> startActivity(Intent(this, AccountActivity::class.java))
-            "cart", "orders" -> startActivity(
-                Intent(this, MainActivity::class.java).putExtra("screen", screen)
+            "cart" -> startActivity(
+                Intent(this, WebActivity::class.java)
+                    .putExtra("url", "https://com11h.com/cart.php")
+            )
+            "orders" -> startActivity(
+                Intent(this, WebActivity::class.java)
+                    .putExtra("url", "https://com11h.com/account.php")
             )
             else -> startActivity(Intent(this, HomeActivity::class.java))
         }
