@@ -1,6 +1,7 @@
 package com.com11h.app
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
@@ -18,13 +19,16 @@ import java.util.concurrent.Executors
 class HomeActivity : Activity() {
     private val executor = Executors.newFixedThreadPool(3)
     private lateinit var content: LinearLayout
+    private lateinit var accountIcon: TextView
     private val green = Color.rgb(22, 128, 60)
+    private val red = Color.rgb(205, 55, 55)
     private val dark = Color.rgb(35, 35, 35)
     private val soft = Color.rgb(247, 249, 247)
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun money(v: Int) = String.format("%,d", v).replace(',', '.') + "đ"
     private fun bg(color: Int, radius: Int = 18) = GradientDrawable().apply { setColor(color); cornerRadius = dp(radius).toFloat() }
+    private fun circle(color: Int) = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(color) }
     private fun label(value: String, size: Float, color: Int = dark, bold: Boolean = false) = TextView(this).apply {
         text = value; textSize = size; setTextColor(color); if (bold) setTypeface(null, Typeface.BOLD)
     }
@@ -34,7 +38,57 @@ class HomeActivity : Activity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); showHome() }
+    override fun onResume() { super.onResume(); if (::accountIcon.isInitialized) refreshAccountIndicator() }
     override fun onDestroy() { executor.shutdownNow(); super.onDestroy() }
+
+    private fun token(): String? = getSharedPreferences("com11h_secure", Context.MODE_PRIVATE).getString("token", null)
+
+    /**
+     * Góc phải: xanh = token còn xác thực được trên server; đỏ = chưa đăng nhập/phiên hết hạn.
+     * Không chỉ kiểm tra token tồn tại để tránh hiển thị xanh giả.
+     */
+    private fun refreshAccountIndicator() {
+        val localToken = token()
+        if (localToken.isNullOrBlank()) {
+            setAccountIndicator(false)
+            return
+        }
+        setAccountIndicator(null)
+        executor.execute {
+            var valid = false
+            try {
+                val c = (URL("https://com11h.com/api/index.php?action=profile").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 8000
+                    readTimeout = 10000
+                    setRequestProperty("Accept", "application/json")
+                    setRequestProperty("Authorization", "Bearer $localToken")
+                }
+                val code = c.responseCode
+                val stream = if (code in 200..299) c.inputStream else c.errorStream
+                val json = JSONObject(stream?.bufferedReader()?.use { it.readText() } ?: "{}")
+                valid = code in 200..299 && json.optBoolean("ok", false)
+                c.disconnect()
+                if (!valid) {
+                    getSharedPreferences("com11h_secure", Context.MODE_PRIVATE).edit().remove("token").apply()
+                }
+            } catch (_: Exception) {
+                // Không đổi sang đỏ chỉ vì mạng chập chờn; trạng thái hiện tại vẫn là "đang kiểm tra".
+            }
+            runOnUiThread { if (localToken == token()) setAccountIndicator(valid) }
+        }
+    }
+
+    private fun setAccountIndicator(valid: Boolean?) {
+        if (!::accountIcon.isInitialized) return
+        accountIcon.background = circle(when (valid) { true -> green; false -> red; null -> Color.GRAY })
+        accountIcon.alpha = if (valid == null) 0.65f else 1f
+        accountIcon.contentDescription = when (valid) {
+            true -> "Tài khoản đã đăng nhập"
+            false -> "Chưa đăng nhập"
+            null -> "Đang kiểm tra tài khoản"
+        }
+    }
 
     private fun shell(title: String, selected: Int): LinearLayout {
         val outer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(soft) }
@@ -43,8 +97,13 @@ class HomeActivity : Activity() {
         }
         header.addView(TextView(this).apply { text = "🍚"; textSize = 28f; gravity = Gravity.CENTER }, LinearLayout.LayoutParams(dp(50), dp(50)))
         header.addView(label(title, 21f, green, true), LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(10) })
-        header.addView(TextView(this).apply { text = "👤"; textSize = 23f; gravity = Gravity.CENTER; setOnClickListener { route("profile") } }, LinearLayout.LayoutParams(dp(46), dp(46)))
+        accountIcon = TextView(this).apply {
+            text = "👤"; textSize = 20f; gravity = Gravity.CENTER; setPadding(dp(5), dp(5), dp(5), dp(5)); background = circle(red)
+            setOnClickListener { route("profile") }
+        }
+        header.addView(accountIcon, LinearLayout.LayoutParams(dp(40), dp(40)))
         outer.addView(header)
+        refreshAccountIndicator()
 
         val scroll = ScrollView(this)
         content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(10), dp(16), dp(18)) }
@@ -109,7 +168,6 @@ class HomeActivity : Activity() {
         val names = linkedSetOf<String>()
         for (i in 0 until foods.length()) names.add(categoryName(foods.getJSONObject(i)))
         if (names.isEmpty()) names.add("Tất cả món")
-
         val horizontal = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         names.take(8).forEach { name ->
@@ -130,8 +188,7 @@ class HomeActivity : Activity() {
                 val json = JSONObject(c.inputStream.bufferedReader().use { it.readText() }); c.disconnect()
                 val foods = json.optJSONObject("data")?.optJSONArray("foods") ?: JSONArray()
                 runOnUiThread {
-                    content.removeView(loading)
-                    addLiveCategories(foods, categoryBox)
+                    content.removeView(loading); addLiveCategories(foods, categoryBox)
                     if (foods.length() == 0) { content.addView(label("Chưa có món. Xem thực đơn đầy đủ để cập nhật.", 14f, Color.GRAY)); return@runOnUiThread }
                     for (i in 0 until minOf(5, foods.length())) content.addView(foodCard(foods.getJSONObject(i)))
                     content.addView(button("XEM TẤT CẢ MÓN →") { route("menu") }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5) })
@@ -151,8 +208,7 @@ class HomeActivity : Activity() {
         card.addView(image, LinearLayout.LayoutParams(dp(78), dp(78)))
         val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(11), 0, 0, 0) }
         info.addView(label(food.optString("name", "Món ăn"), 16f, dark, true)); info.addView(label(money(food.optInt("price")), 15f, green, true).apply { setPadding(0, dp(4), 0, dp(2)) })
-        val stock = food.optInt("stock", -1)
-        val stockText = if (stock >= 0) "Còn $stock suất" else "Đang bán"
+        val stock = food.optInt("stock", -1); val stockText = if (stock >= 0) "Còn $stock suất" else "Đang bán"
         info.addView(label("$stockText • ${categoryName(food)}", 12f, Color.GRAY).apply { maxLines = 2 }); card.addView(info, LinearLayout.LayoutParams(0, -2, 1f))
         val imageUrl = food.optString("image"); if (imageUrl.isNotBlank()) loadImage(imageUrl, image); return card
     }
