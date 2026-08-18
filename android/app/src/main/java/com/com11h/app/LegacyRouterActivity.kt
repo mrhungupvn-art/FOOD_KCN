@@ -11,7 +11,8 @@ class LegacyRouterActivity : Activity() {
         val screen = intent.getStringExtra("screen")
         when (screen) {
             "menu" -> startActivity(Intent(this, MenuActivity::class.java))
-            "cart", "profile", "orders" -> startActivity(
+            "profile" -> startActivity(Intent(this, AccountActivity::class.java))
+            "cart", "orders" -> startActivity(
                 Intent(this, MainActivity::class.java).putExtra("screen", screen)
             )
             else -> startActivity(Intent(this, HomeActivity::class.java))
