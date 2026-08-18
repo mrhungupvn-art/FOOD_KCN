@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.graphics.Color
 import android.os.Bundle
+import android.view.View
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
@@ -61,7 +62,7 @@ class WebActivity : Activity() {
             settings.displayZoomControls = false
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
-                    progress.visibility = ProgressBar.GONE
+                    progress.visibility = View.GONE
                 }
             }
             webChromeClient = WebChromeClient()
@@ -79,7 +80,7 @@ class WebActivity : Activity() {
             return
         }
 
-        progress.visibility = ProgressBar.VISIBLE
+        progress.visibility = View.VISIBLE
         executor.execute {
             try {
                 val conn = (URL("https://com11h.com/api/index.php?action=create_web_sso").openConnection() as HttpURLConnection).apply {
@@ -101,19 +102,17 @@ class WebActivity : Activity() {
                 conn.disconnect()
 
                 runOnUiThread {
-                    progress.visibility = ProgressBar.GONE
+                    progress.visibility = View.GONE
                     if (code in 200..299 && json.optBoolean("ok", false) && ssoUrl.isNotBlank()) {
                         webView.loadUrl(ssoUrl)
                     } else {
-                        // The website can still be opened while the host-side SSO endpoint is
-                        // being installed. Do not leave the customer stuck inside the app.
                         Toast.makeText(this, "Chưa kết nối SSO website. Đang mở thực đơn.", Toast.LENGTH_SHORT).show()
                         webView.loadUrl(targetUrl)
                     }
                 }
             } catch (_: Exception) {
                 runOnUiThread {
-                    progress.visibility = ProgressBar.GONE
+                    progress.visibility = View.GONE
                     Toast.makeText(this, "Không kết nối được SSO. Đang mở thực đơn.", Toast.LENGTH_SHORT).show()
                     webView.loadUrl(targetUrl)
                 }
