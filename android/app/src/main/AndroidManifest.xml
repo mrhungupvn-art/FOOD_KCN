@@ -10,5 +10,6 @@
         <activity android:name=".MenuActivity" android:screenOrientation="portrait" android:exported="false" />
         <activity android:name=".LegacyRouterActivity" android:screenOrientation="portrait" android:exported="false" />
         <activity android:name=".MainActivity" android:screenOrientation="portrait" android:exported="false" />
+        <activity android:name=".AccountActivity" android:screenOrientation="portrait" android:exported="false" />
     </application>
 </manifest>
