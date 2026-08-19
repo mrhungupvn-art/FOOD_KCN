@@ -13,6 +13,7 @@ import android.view.animation.AnimationUtils
 import android.view.inputmethod.EditorInfo
 import android.widget.*
 import org.json.JSONArray
+import org.json.JSONObject
 import java.util.concurrent.Executors
 
 /**
@@ -38,6 +39,10 @@ class HomeActivity : Activity() {
     // Badge số lượng trên icon 🛒 Giỏ hàng ở thanh điều hướng — cập nhật mỗi khi
     // dựng lại trang chủ và mỗi khi quay lại trang chủ từ màn hình khác (onResume).
     private var cartBadge: TextView? = null
+    // Khung chứa "Món ăn phổ biến" — giữ lại tham chiếu để có thể tải & xáo lại
+    // danh sách món mỗi khi khách quay lại trang chủ (onResume), không chỉ lúc
+    // dựng trang lần đầu.
+    private var popularBox: LinearLayout? = null
 
     companion object { private const val SITE_URL = "https://com11h.com" }
 
@@ -47,8 +52,10 @@ class HomeActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); account = AccountSync(this); showSplash() }
     override fun onDestroy() { handler.removeCallbacksAndMessages(null); executor.shutdownNow(); super.onDestroy() }
     // Khách có thể đã thêm/bớt món ở màn Thực đơn hoặc Giỏ hàng rồi bấm Back
-    // quay lại đây (không tạo lại Activity) — cập nhật badge cho khớp giỏ hàng mới nhất.
-    override fun onResume() { super.onResume(); refreshCartBadge() }
+    // quay lại đây (không tạo lại Activity) — cập nhật badge cho khớp giỏ hàng mới
+    // nhất, đồng thời tải & xáo lại "Món ăn phổ biến" để mỗi lần quay về trang chủ
+    // khách luôn thấy các món khác nhau, không cố định mãi cùng vài món.
+    override fun onResume() { super.onResume(); refreshCartBadge(); loadPopularFoods() }
 
     /** Cập nhật số lượng (badge đỏ) trên icon 🛒 Giỏ hàng ở thanh điều hướng, đọc từ giỏ hàng cục bộ đã lưu. */
     private fun refreshCartBadge() {
@@ -217,6 +224,48 @@ class HomeActivity : Activity() {
         }
     }
 
+    /**
+     * Tải "Món ăn phổ biến" từ api?action=menu và hiển thị NGẪU NHIÊN 6 món
+     * (xáo trộn lại toàn bộ danh sách món đang bán mỗi lần gọi hàm này) — nhờ
+     * vậy mỗi lần khách mở lại trang chủ (kể cả bấm Back từ Thực đơn/Giỏ hàng
+     * quay về, xem onResume) sẽ thấy các món khác nhau, không cố định mãi
+     * cùng vài món như trước (trước đây luôn lấy đúng 4 món đầu danh sách).
+     */
+    private fun loadPopularFoods() {
+        val popularBox = this.popularBox ?: return
+        popularBox.removeAllViews()
+        val popularLoading = label("⏳ Đang tải món ăn...", 15f, secondary)
+        popularBox.addView(popularLoading)
+        executor.execute {
+            val r = account.request("menu")
+            runOnUiThread {
+                if (popularBox != this.popularBox) return@runOnUiThread // màn hình đã đổi/hủy trong lúc chờ tải
+                popularBox.removeView(popularLoading)
+                val arr = r.optJSONObject("data")?.optJSONArray("foods") ?: JSONArray()
+                if (arr.length() == 0) { popularBox.addView(label("Chưa có món nào đang bán.", 15f, secondary)); return@runOnUiThread }
+                val list = mutableListOf<JSONObject>()
+                for (i in 0 until arr.length()) list.add(arr.getJSONObject(i))
+                list.shuffle()
+                val count = minOf(6, list.size)
+                for (i in 0 until count) {
+                    val f = list[i]
+                    val name = f.optString("name")
+                    val imageUrl = f.optString("image")
+                    val card = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(12), dp(12), dp(12)); background = bg(Color.WHITE, 16); layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) } }
+                    // Ảnh món ăn to hơn trước và có thể bấm vào để xem phóng to
+                    // (chụm/mở 2 ngón tay để zoom), giống hệt cách xem banner.
+                    val img = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; background = bg(Color.rgb(255, 245, 240), 14); clipToOutline = true }
+                    card.addView(img, LinearLayout.LayoutParams(dp(68), dp(68))); ImageLoader.load(img, imageUrl)
+                    img.setOnClickListener { openFoodImage(imageUrl, name) }
+                    val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(10), 0, 0, 0) }
+                    info.addView(label(name, 17f, text, true)); info.addView(label(String.format("%,d", f.optInt("price")).replace(',', '.') + "đ", 16f, primary, true)); info.addView(label("còn ${f.optInt("stock")} phần", 13f, secondary)); card.addView(info, LinearLayout.LayoutParams(0, -2, 1f))
+                    info.setOnClickListener { open("menu") }
+                    popularBox.addView(card)
+                }
+            }
+        }
+    }
+
     private fun showHome() {
         val shell = shell()
         setContentView(shell)
@@ -241,31 +290,8 @@ class HomeActivity : Activity() {
         content.addView(label("Món ăn phổ biến", 21f, text, true).apply { setPadding(0, 0, 0, dp(8)) })
         val popularBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         content.addView(popularBox)
-        val popularLoading = label("⏳ Đang tải món ăn...", 15f, secondary); popularBox.addView(popularLoading)
-        executor.execute {
-            val r = account.request("menu")
-            runOnUiThread {
-                popularBox.removeView(popularLoading)
-                val arr = r.optJSONObject("data")?.optJSONArray("foods") ?: JSONArray()
-                if (arr.length() == 0) { popularBox.addView(label("Chưa có món nào đang bán.", 15f, secondary)); return@runOnUiThread }
-                val count = minOf(4, arr.length())
-                for (i in 0 until count) {
-                    val f = arr.getJSONObject(i)
-                    val name = f.optString("name")
-                    val imageUrl = f.optString("image")
-                    val card = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(12), dp(12), dp(12)); background = bg(Color.WHITE, 16); layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) } }
-                    // Ảnh món ăn to hơn trước và có thể bấm vào để xem phóng to
-                    // (chụm/mở 2 ngón tay để zoom), giống hệt cách xem banner.
-                    val img = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; background = bg(Color.rgb(255, 245, 240), 14); clipToOutline = true }
-                    card.addView(img, LinearLayout.LayoutParams(dp(68), dp(68))); ImageLoader.load(img, imageUrl)
-                    img.setOnClickListener { openFoodImage(imageUrl, name) }
-                    val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(10), 0, 0, 0) }
-                    info.addView(label(name, 17f, text, true)); info.addView(label(String.format("%,d", f.optInt("price")).replace(',', '.') + "đ", 16f, primary, true)); info.addView(label("còn ${f.optInt("stock")} phần", 13f, secondary)); card.addView(info, LinearLayout.LayoutParams(0, -2, 1f))
-                    info.setOnClickListener { open("menu") }
-                    popularBox.addView(card)
-                }
-            }
-        }
+        this.popularBox = popularBox
+        loadPopularFoods()
     }
 
     private fun open(screen: String) { startActivity(Intent(this, MainActivity::class.java).putExtra("screen", screen)) }
