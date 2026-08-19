@@ -7,16 +7,16 @@ import java.net.URL
 import java.net.URLEncoder
 
 /**
- * The ONLY remote integration used by the new COM11H app.
- * Menu, cart, checkout and app UI are local/independent.
- * This class talks to the existing COM11H web account API only for
- * customer authentication/profile synchronization.
+ * The ONLY remote integration used by the standalone COM11H app.
+ * Menu, cart and app orders stay local. Customer account/profile uses the
+ * existing COM11H account API and preserves the legacy token storage key
+ * used by the previous app, so an existing app session can be reused.
  */
 class AccountSync(context: Context) {
     companion object {
         private const val BASE_URL = "https://com11h.com/api/index.php"
-        private const val PREFS = "com11h_account"
-        private const val TOKEN = "account_token"
+        private const val PREFS = "com11h_secure"
+        private const val TOKEN = "token"
     }
 
     private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -45,7 +45,11 @@ class AccountSync(context: Context) {
             val code = c.responseCode
             val stream = if (code in 200..299) c.inputStream else c.errorStream
             val text = stream?.bufferedReader()?.use { it.readText() } ?: "{}"
-            JSONObject(text).put("http_code", code)
+            val json = try { JSONObject(text) } catch (_: Exception) {
+                JSONObject().put("ok", false).put("message", "Máy chủ trả về dữ liệu không hợp lệ (HTTP $code).")
+            }
+            if (!json.has("http_code")) json.put("http_code", code)
+            json
         } finally { c.disconnect() }
     }
 }
