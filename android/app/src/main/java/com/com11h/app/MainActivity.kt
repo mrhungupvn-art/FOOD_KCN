@@ -112,6 +112,23 @@ class MainActivity : Activity() {
         val s = shell("Thực đơn", 1); setContentView(s); val c = contentOf(s)
         val head = label("Món ăn ngon mỗi ngày", 21f, dark, true); c.addView(head)
         c.addView(label("Đồng bộ trực tiếp từ com11h.com", 13f, secondary))
+
+        // Ô tìm kiếm ngay trong màn Thực đơn — nhận sẵn từ khoá được truyền từ
+        // trang chủ (extra "query") khi khách bấm nút 🔍 hoặc "Tìm kiếm" trên
+        // bàn phím ở ô tìm kiếm trang chủ, đồng thời cho phép gõ lại tại đây.
+        val initialQuery = intent.getStringExtra("query") ?: ""
+        val searchRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val searchInput = EditText(this).apply {
+            hint = "Tìm món ăn..."; textSize = 14f; isSingleLine = true
+            setText(initialQuery)
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            setPadding(dp(14), 0, dp(14), 0); background = outline(primary, 14)
+        }
+        searchRow.addView(searchInput, LinearLayout.LayoutParams(0, dp(44), 1f))
+        val searchBtn = TextView(this).apply { text = "🔍"; textSize = 17f; gravity = Gravity.CENTER; setTextColor(Color.WHITE); background = bg(primary, 14) }
+        searchRow.addView(searchBtn, LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginStart = dp(8) })
+        c.addView(searchRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+
         val chipsRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val chipsScroll = HorizontalScrollView(this).apply { addView(chipsRow) }
         c.addView(chipsScroll, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10); bottomMargin = dp(4) })
@@ -138,8 +155,15 @@ class MainActivity : Activity() {
                     var selectedCategory = "Tất cả"
                     fun renderList(cat: String) {
                         listBox.removeAllViews()
-                        val filtered = if (cat == "Tất cả") foods else foods.filter { it.category == cat }
-                        if (filtered.isEmpty()) { listBox.addView(label("Không có món nào trong danh mục này.", 14f, secondary)); return }
+                        val keyword = searchInput.text.toString().trim()
+                        var filtered = if (cat == "Tất cả") foods else foods.filter { it.category == cat }
+                        if (keyword.isNotEmpty()) {
+                            filtered = filtered.filter { it.name.contains(keyword, ignoreCase = true) || it.description.contains(keyword, ignoreCase = true) }
+                        }
+                        if (filtered.isEmpty()) {
+                            listBox.addView(label(if (keyword.isNotEmpty()) "Không tìm thấy món nào khớp với \"$keyword\"." else "Không có món nào trong danh mục này.", 14f, secondary))
+                            return
+                        }
                         filtered.forEach { f -> listBox.addView(foodCard(f)) }
                     }
                     fun renderChips() {
@@ -153,6 +177,10 @@ class MainActivity : Activity() {
                                 setOnClickListener { selectedCategory = cat; renderChips(); renderList(cat) }
                             }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(8) })
                         }
+                    }
+                    searchBtn.setOnClickListener { renderList(selectedCategory) }
+                    searchInput.setOnEditorActionListener { _, actionId, _ ->
+                        if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) { renderList(selectedCategory); true } else false
                     }
                     renderChips(); renderList(selectedCategory)
                 }

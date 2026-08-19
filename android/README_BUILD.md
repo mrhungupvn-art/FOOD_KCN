@@ -1,4 +1,22 @@
-# COM11H Android v1.4.2
+# COM11H Android v1.6.0
+
+## Ghi chú bản 1.6.0 (so với 1.5.2)
+- **Trang chủ – ô tìm kiếm:** thêm nút bấm 🔍 cạnh ô "Tìm món ăn..." (trước đó
+  chỉ có ô nhập, không có cách nào để bấm tìm). Bấm nút hoặc bấm "Tìm kiếm"
+  trên bàn phím sẽ mở màn Thực đơn và tự lọc theo từ khoá đã nhập. Màn Thực
+  đơn cũng có sẵn ô tìm kiếm riêng để gõ lại/đổi từ khoá.
+- **Trang chủ – banner giữa trang:** không còn banner tĩnh cố định trong code
+  app. Banner giờ tải trực tiếp từ `api?action=banners`, dùng CHUNG bảng dữ
+  liệu với **Admin > Banner trang chủ** (`admin/banners.php`) mà web đang
+  dùng — Admin thêm/sửa/xoá/đổi thứ tự banner trên trang quản lý là app tự
+  cập nhật theo ngay lần mở app kế tiếp, không cần build lại app. App hiển
+  thị banner dạng slider tự chạy (đổi ảnh mỗi 4 giây) nếu có từ 2 banner trở
+  lên, bấm vào banner sẽ mở đúng link đã cấu hình trên Admin (qua
+  `banner_click.php` để thống kê lượt click giống web). Nếu Admin chưa tạo
+  banner nào, app tự hiển thị lại banner mặc định như cũ.
+- **Bắt buộc:** phải upload `api/index.php` mới (đã thêm action `banners`)
+  lên server TRƯỚC KHI phát hành app 1.6.0, nếu không banner sẽ không tải
+  được và app sẽ tự dùng lại banner mặc định.
 
 ## Ghi chú bản 1.4.2 (so với 1.4.1)
 Chỉnh giao diện thẻ món ăn ở màn Thực đơn theo yêu cầu:

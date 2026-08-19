@@ -9,6 +9,8 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
+import android.view.animation.AnimationUtils
+import android.view.inputmethod.EditorInfo
 import android.widget.*
 import org.json.JSONArray
 import java.util.concurrent.Executors
@@ -16,6 +18,12 @@ import java.util.concurrent.Executors
 /**
  * Trang chủ COM11H. "Món ăn phổ biến" lấy trực tiếp từ api?action=menu (cùng
  * dữ liệu với web) qua AccountSync — không còn danh sách món ăn giả lập.
+ * Banner ở giữa trang và ô tìm kiếm cũng đồng bộ trực tiếp với server:
+ *   - Banner: lấy từ api?action=banners, cùng dữ liệu Admin > Banner trang
+ *     chủ đang quản lý cho web (admin/banners.php) — đổi banner trên Admin
+ *     là app tự cập nhật theo, không cần sửa code app.
+ *   - Ô tìm kiếm: có nút bấm 🔍 (và bấm "Tìm kiếm" trên bàn phím) để mở
+ *     màn Thực đơn và lọc sẵn theo từ khoá đã nhập.
  */
 class HomeActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
@@ -27,6 +35,8 @@ class HomeActivity : Activity() {
     private val bgColor = Color.rgb(255, 248, 245)
     private val text = Color.rgb(38, 38, 38)
     private val secondary = Color.rgb(107, 107, 107)
+
+    companion object { private const val SITE_URL = "https://com11h.com" }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun bg(color: Int, radius: Int = 18) = GradientDrawable().apply { setColor(color); cornerRadius = dp(radius).toFloat() }
@@ -70,6 +80,99 @@ class HomeActivity : Activity() {
         return outer
     }
 
+    /** Mở màn Thực đơn, lọc sẵn theo từ khoá tìm kiếm đã nhập ở trang chủ. */
+    private fun runSearch(keyword: String) {
+        val q = keyword.trim()
+        val i = Intent(this, MainActivity::class.java).putExtra("screen", "menu")
+        if (q.isNotEmpty()) i.putExtra("query", q)
+        startActivity(i)
+    }
+
+    private fun searchBox(): LinearLayout {
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val input = EditText(this).apply {
+            hint = "Tìm món ăn..."
+            textSize = 14f
+            isSingleLine = true
+            imeOptions = EditorInfo.IME_ACTION_SEARCH
+            setPadding(dp(14), 0, dp(14), 0)
+            background = bg(Color.WHITE, 14)
+            setOnEditorActionListener { v, actionId, _ ->
+                if (actionId == EditorInfo.IME_ACTION_SEARCH) { runSearch(v.text.toString()); true } else false
+            }
+        }
+        row.addView(input, LinearLayout.LayoutParams(0, dp(46), 1f))
+        row.addView(TextView(this).apply {
+            text = "🔍"
+            textSize = 18f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            background = bg(primary, 14)
+            contentDescription = "Tìm kiếm"
+            setOnClickListener { runSearch(input.text.toString()) }
+        }, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(8) })
+        return row
+    }
+
+    /** Banner tĩnh dự phòng khi Admin chưa tạo banner nào hoặc chưa tải được dữ liệu. */
+    private fun staticBanner(): LinearLayout {
+        val banner = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(17), dp(16), dp(12), dp(16)); background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(primaryDark, primary, accent)).apply { cornerRadius = dp(20).toFloat() } }
+        val copy = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        copy.addView(label("Cơm ngon\nmỗi ngày", 25f, Color.WHITE, true)); copy.addView(label("Ngon – Sạch – Nhanh", 13f, Color.WHITE).apply { setPadding(0, dp(5), 0, 0) })
+        banner.addView(copy, LinearLayout.LayoutParams(0, -2, 1f)); banner.addView(ImageView(this).apply { setImageResource(R.drawable.com11h_logo) }, LinearLayout.LayoutParams(dp(100), dp(88)))
+        return banner
+    }
+
+    /** Mở link banner qua banner_click.php để server ghi nhận lượt click (giống web), rồi chuyển tới link đích. */
+    private fun openBanner(id: Int, linkUrl: String) {
+        val url = if (id > 0) "$SITE_URL/banner_click.php?id=$id" else linkUrl
+        startActivity(Intent(this, WebActivity::class.java).putExtra("url", url))
+    }
+
+    /** Tải banner trang chủ từ api?action=banners (đồng bộ Admin > Banner trang chủ) và hiển thị dạng slider tự chạy. */
+    private fun loadBanners(container: FrameLayout) {
+        executor.execute {
+            val r = try { account.request("banners") } catch (_: Exception) { null }
+            runOnUiThread {
+                val arr = r?.optJSONObject("data")?.optJSONArray("banners") ?: JSONArray()
+                if (r == null || !r.optBoolean("ok") || arr.length() == 0) {
+                    container.removeAllViews(); container.addView(staticBanner(), FrameLayout.LayoutParams(-1, dp(120)))
+                    return@runOnUiThread
+                }
+
+                val flipper = ViewFlipper(this).apply {
+                    inAnimation = AnimationUtils.loadAnimation(this@HomeActivity, android.R.anim.fade_in)
+                    outAnimation = AnimationUtils.loadAnimation(this@HomeActivity, android.R.anim.fade_out)
+                    flipInterval = 4000
+                }
+                for (i in 0 until arr.length()) {
+                    val b = arr.getJSONObject(i)
+                    val id = b.optInt("id")
+                    val title = b.optString("title")
+                    val linkUrl = b.optString("link_url")
+                    val slide = FrameLayout(this)
+                    val img = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+                    slide.addView(img, FrameLayout.LayoutParams(-1, -1))
+                    if (title.isNotBlank()) {
+                        slide.addView(TextView(this).apply {
+                            text = title; textSize = 13f; setTextColor(Color.WHITE); setTypeface(null, Typeface.BOLD)
+                            setPadding(dp(14), dp(8), dp(14), dp(8))
+                            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Color.TRANSPARENT, Color.argb(160, 0, 0, 0)))
+                        }, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
+                    }
+                    slide.clipToOutline = true
+                    slide.background = bg(Color.rgb(255, 245, 240), 20)
+                    slide.setOnClickListener { openBanner(id, linkUrl) }
+                    flipper.addView(slide)
+                    ImageLoader.load(img, b.optString("image"))
+                }
+                container.removeAllViews()
+                container.addView(flipper, FrameLayout.LayoutParams(-1, dp(120)))
+                if (arr.length() > 1) flipper.startFlipping()
+            }
+        }
+    }
+
     private fun showHome() {
         val shell = shell()
         setContentView(shell)
@@ -77,13 +180,12 @@ class HomeActivity : Activity() {
         val content = scroll.getChildAt(0) as LinearLayout
         content.addView(label("Giao đến", 12f, secondary))
         content.addView(label("📍 Địa chỉ giao hàng của bạn", 14f, text, true).apply { setPadding(0, 0, 0, dp(10)) })
-        content.addView(EditText(this).apply { hint = "Tìm món ăn..."; textSize = 14f; isSingleLine = true; setPadding(dp(14), 0, dp(14), 0); background = bg(Color.WHITE, 14) }, LinearLayout.LayoutParams(-1, dp(46)).apply { bottomMargin = dp(10) })
+        content.addView(searchBox(), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
 
-        val banner = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(17), dp(16), dp(12), dp(16)); background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(primaryDark, primary, accent)).apply { cornerRadius = dp(20).toFloat() } }
-        val copy = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        copy.addView(label("Cơm ngon\nmỗi ngày", 25f, Color.WHITE, true)); copy.addView(label("Ngon – Sạch – Nhanh", 13f, Color.WHITE).apply { setPadding(0, dp(5), 0, 0) })
-        banner.addView(copy, LinearLayout.LayoutParams(0, -2, 1f)); banner.addView(ImageView(this).apply { setImageResource(R.drawable.com11h_logo) }, LinearLayout.LayoutParams(dp(100), dp(88)))
-        content.addView(banner, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(15) })
+        val bannerContainer = FrameLayout(this)
+        bannerContainer.addView(staticBanner(), FrameLayout.LayoutParams(-1, dp(120)))
+        content.addView(bannerContainer, LinearLayout.LayoutParams(-1, dp(120)).apply { bottomMargin = dp(15) })
+        loadBanners(bannerContainer)
 
         content.addView(label("Đặt món ngay", 20f, text, true).apply { setPadding(0, 0, 0, dp(9)) })
         val shortcuts = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
