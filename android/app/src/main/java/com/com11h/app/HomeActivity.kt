@@ -47,7 +47,7 @@ class HomeActivity : SessionActivity() {
     // danh sách món mỗi khi khách quay lại trang chủ (onResume), không chỉ lúc
     // dựng trang lần đầu.
     private var popularBox: LinearLayout? = null
-    // "Menu Vip" — dải ảnh món ăn giá trên 50.000đ tự trôi từ phải qua trái.
+    // "Menu Vip" — dải ảnh món ăn giá trên 40.000đ tự trôi từ phải qua trái.
     // vipRow chứa 2 bản sao danh sách món nối liền nhau để cuộn lặp vô tận
     // (mượt mà, không giật khi quay vòng); vipScrollView là khung cuộn cho
     // phép khách chạm để dừng và tự vuốt qua vuốt lại.
@@ -317,9 +317,9 @@ class HomeActivity : SessionActivity() {
                 row.removeAllViews()
                 val arr = r?.optJSONObject("data")?.optJSONArray("foods") ?: JSONArray()
                 val list = mutableListOf<JSONObject>()
-                for (i in 0 until arr.length()) { val f = arr.getJSONObject(i); if (f.optInt("price") > 50000) list.add(f) }
+                for (i in 0 until arr.length()) { val f = arr.getJSONObject(i); if (f.optInt("price") > 40000) list.add(f) }
                 if (list.isEmpty()) {
-                    row.addView(label("Chưa có món Vip (trên 50.000đ).", 14f, secondary).apply { setPadding(dp(4), dp(10), dp(4), dp(10)) })
+                    row.addView(label("Chưa có món Vip (trên 40.000đ).", 14f, secondary).apply { setPadding(dp(4), dp(10), dp(4), dp(10)) })
                     return@runOnUiThread
                 }
                 list.shuffle()
