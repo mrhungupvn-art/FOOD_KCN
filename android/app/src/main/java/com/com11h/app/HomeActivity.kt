@@ -47,6 +47,15 @@ class HomeActivity : SessionActivity() {
     // danh sách món mỗi khi khách quay lại trang chủ (onResume), không chỉ lúc
     // dựng trang lần đầu.
     private var popularBox: LinearLayout? = null
+    // "Menu Vip" — dải ảnh món ăn giá trên 50.000đ tự trôi từ phải qua trái.
+    // vipRow chứa 2 bản sao danh sách món nối liền nhau để cuộn lặp vô tận
+    // (mượt mà, không giật khi quay vòng); vipScrollView là khung cuộn cho
+    // phép khách chạm để dừng và tự vuốt qua vuốt lại.
+    private var vipScrollView: HorizontalScrollView? = null
+    private var vipRow: LinearLayout? = null
+    private var vipAutoScrollRunnable: Runnable? = null
+    private var vipUserTouching = false
+    private var vipSingleSetWidth = 0
 
     companion object { private const val SITE_URL = "https://com11h.com" }
 
@@ -59,7 +68,12 @@ class HomeActivity : SessionActivity() {
     // nhập/đăng xuất, rồi bấm Back quay lại đây (không tạo lại Activity) — cập
     // nhật badge giỏ hàng, icon tài khoản và xáo lại "Món ăn phổ biến" để mỗi
     // lần quay về trang chủ khách luôn thấy các món khác nhau.
-    override fun onResume() { super.onResume(); refreshCartBadge(); refreshProfileIcon(); loadPopularFoods() }
+    override fun onResume() {
+        super.onResume(); refreshCartBadge(); refreshProfileIcon(); loadPopularFoods()
+        vipAutoScrollRunnable?.let { handler.post(it) }
+    }
+    // Dừng dải "Menu Vip" tự trôi khi rời màn hình (đỡ tốn pin/CPU khi không hiển thị).
+    override fun onPause() { vipAutoScrollRunnable?.let { handler.removeCallbacks(it) }; super.onPause() }
 
     /** Cập nhật số lượng (badge đỏ) trên icon 🛒 Giỏ hàng ở thanh điều hướng, đọc từ giỏ hàng cục bộ đã lưu. */
     private fun refreshCartBadge() {
@@ -286,6 +300,109 @@ class HomeActivity : SessionActivity() {
         }
     }
 
+    /**
+     * Tải danh sách món cho "Menu Vip" (chỉ lấy món giá trên 50.000đ) từ cùng
+     * api?action=menu, rồi dựng dải ảnh nằm ngang tự trôi. Nối 2 bản sao danh
+     * sách liền nhau trong vipRow để khi cuộn hết bản 1 thì lặp lại y hệt bản
+     * 2 — tạo cảm giác trôi vô tận không bị giật/khựng lại.
+     */
+    private fun loadVipCarousel() {
+        val row = vipRow ?: return
+        row.removeAllViews()
+        row.addView(label("⏳ Đang tải...", 14f, secondary).apply { setPadding(dp(4), dp(10), dp(4), dp(10)) })
+        executor.execute {
+            val r = try { account.request("menu") } catch (_: Exception) { null }
+            runOnUiThread {
+                if (row != this.vipRow) return@runOnUiThread // màn hình đã đổi/hủy trong lúc chờ tải
+                row.removeAllViews()
+                val arr = r?.optJSONObject("data")?.optJSONArray("foods") ?: JSONArray()
+                val list = mutableListOf<JSONObject>()
+                for (i in 0 until arr.length()) { val f = arr.getJSONObject(i); if (f.optInt("price") > 50000) list.add(f) }
+                if (list.isEmpty()) {
+                    row.addView(label("Chưa có món Vip (trên 50.000đ).", 14f, secondary).apply { setPadding(dp(4), dp(10), dp(4), dp(10)) })
+                    return@runOnUiThread
+                }
+                list.shuffle()
+                // Thêm đúng 2 lần cùng danh sách để cuộn lặp liền mạch.
+                repeat(2) { list.forEach { f -> row.addView(vipCard(f)) } }
+                row.post {
+                    vipSingleSetWidth = row.width / 2
+                    startVipAutoScroll()
+                }
+            }
+        }
+    }
+
+    /** Một thẻ ảnh món trong dải "Menu Vip": ảnh + tên + giá, bấm vào để xem ảnh to và tự thêm vào giỏ. */
+    private fun vipCard(f: JSONObject): View {
+        val id = f.optInt("id"); val name = f.optString("name"); val imageUrl = f.optString("image")
+        val price = f.optInt("price"); val stock = f.optInt("stock")
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(dp(112), dp(148)).apply { marginEnd = dp(10) }
+        }
+        val img = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; background = bg(Color.rgb(255, 245, 240), 14); clipToOutline = true }
+        card.addView(img, LinearLayout.LayoutParams(dp(112), dp(100)))
+        ImageLoader.load(img, imageUrl)
+        card.addView(label(name, 12.5f, text, true).apply {
+            maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; setPadding(0, dp(5), 0, 0)
+        })
+        card.addView(label(String.format("%,d", price).replace(',', '.') + "đ", 12.5f, primary, true))
+        card.setOnClickListener { onVipFoodTap(id, name, imageUrl, stock) }
+        return card
+    }
+
+    /** Bấm vào 1 món trong "Menu Vip": tự thêm 1 phần vào giỏ hàng, rồi mở ảnh phóng to ngay sau đó. */
+    private fun onVipFoodTap(id: Int, name: String, imageUrl: String, stock: Int) {
+        addVipToCart(id, name, stock)
+        openFoodImage(imageUrl, name)
+    }
+
+    /** Thêm 1 phần món vào giỏ hàng cục bộ (cùng định dạng/nơi lưu với MainActivity), rồi cập nhật badge 🛒. */
+    private fun addVipToCart(id: Int, name: String, stock: Int) {
+        val p = getSharedPreferences("com11h_local", MODE_PRIVATE)
+        val arr = try { JSONArray(p.getString("cart", "[]")) } catch (_: Exception) { JSONArray() }
+        var found = false
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            if (o.optInt("id") == id) {
+                val q = o.optInt("qty")
+                if (stock in 0 until q + 1) { toast("Chỉ còn $stock phần \"$name\""); return }
+                o.put("qty", q + 1); found = true; break
+            }
+        }
+        if (!found) {
+            if (stock < 1) { toast("Món \"$name\" đã hết hàng"); return }
+            arr.put(JSONObject().put("id", id).put("qty", 1))
+        }
+        p.edit().putString("cart", arr.toString()).apply()
+        refreshCartBadge()
+        toast("Đã thêm \"$name\" vào giỏ hàng")
+    }
+
+    private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+
+    /**
+     * Tự trôi dải "Menu Vip" từ phải qua trái (tăng dần scrollX), lặp vô tận
+     * nhờ 2 bản sao nội dung. Tạm dừng khi khách đang chạm (vipUserTouching)
+     * để không "giật" ảnh khỏi tay khi họ đang vuốt xem.
+     */
+    private fun startVipAutoScroll() {
+        vipAutoScrollRunnable?.let { handler.removeCallbacks(it) }
+        val scroll = vipScrollView ?: return
+        val runnable = object : Runnable {
+            override fun run() {
+                if (!vipUserTouching && vipSingleSetWidth > 0) {
+                    val newX = scroll.scrollX + 2
+                    if (newX >= vipSingleSetWidth) scroll.scrollTo(newX - vipSingleSetWidth, 0) else scroll.scrollTo(newX, 0)
+                }
+                handler.postDelayed(this, 30)
+            }
+        }
+        vipAutoScrollRunnable = runnable
+        handler.post(runnable)
+    }
+
     private fun showHome() {
         val shell = shell()
         setContentView(shell)
@@ -298,12 +415,28 @@ class HomeActivity : SessionActivity() {
         content.addView(bannerContainer, LinearLayout.LayoutParams(-1, dp(120)).apply { bottomMargin = dp(15) })
         loadBanners(bannerContainer)
 
-        content.addView(label("Đặt món ngay", 21f, text, true).apply { setPadding(0, 0, 0, dp(9)) })
-        val shortcuts = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-        listOf("🍱\nĐặt món", "🍚\nMón ăn", "📦\nĐơn hàng", "🎁\nƯu đãi").forEach { item ->
-            shortcuts.addView(TextView(this).apply { text = item; textSize = 13.5f; gravity = Gravity.CENTER; setTextColor(primary); background = bg(Color.WHITE, 16); setPadding(dp(6), dp(11), dp(6), dp(11)); setOnClickListener { when { item.contains("Đơn") -> open("orders"); item.contains("Ưu đãi") -> open("lucky"); else -> open("menu") } } }, LinearLayout.LayoutParams(0, dp(76), 1f).apply { marginEnd = dp(7) })
+        content.addView(label("Menu Vip", 21f, text, true).apply { setPadding(0, 0, 0, dp(9)) })
+        val vipScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
         }
-        content.addView(shortcuts, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(16) })
+        val vipRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        vipScroll.addView(vipRow, LinearLayout.LayoutParams(-2, -2))
+        // Chạm vào để tạm dừng tự trôi (vẫn vuốt qua vuốt lại bình thường), buông tay
+        // ra một lúc thì tự trôi tiếp — không chặn sự kiện chạm nên ScrollView vẫn
+        // xử lý vuốt/fling như bình thường.
+        vipScroll.setOnTouchListener { _, event ->
+            when (event.action) {
+                android.view.MotionEvent.ACTION_DOWN -> vipUserTouching = true
+                android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL ->
+                    handler.postDelayed({ vipUserTouching = false }, 2500)
+            }
+            false
+        }
+        content.addView(vipScroll, LinearLayout.LayoutParams(-1, dp(152)).apply { bottomMargin = dp(16) })
+        this.vipScrollView = vipScroll
+        this.vipRow = vipRow
+        loadVipCarousel()
 
         content.addView(label("Món ăn phổ biến", 21f, text, true).apply { setPadding(0, 0, 0, dp(8)) })
         val popularBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
