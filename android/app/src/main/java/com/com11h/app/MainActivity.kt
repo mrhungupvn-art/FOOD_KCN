@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
+import android.view.View
 import android.widget.*
 import org.json.JSONArray
 import org.json.JSONObject
@@ -64,6 +65,23 @@ class MainActivity : Activity() {
     }
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 
+    /** Icon 👤 Tài khoản ở header — đổi màu nền + có chấm xanh khi khách đã đăng nhập. */
+    private fun profileIconCell(): View {
+        val loggedIn = account.isLoggedIn()
+        val cell = FrameLayout(this)
+        cell.addView(TextView(this).apply {
+            text = "👤"; textSize = 19f; gravity = Gravity.CENTER
+            background = bg(if (loggedIn) Color.rgb(224, 247, 233) else Color.rgb(255, 240, 234), 22)
+            setOnClickListener { showProfile() }
+        }, FrameLayout.LayoutParams(dp(44), dp(44)))
+        if (loggedIn) {
+            cell.addView(View(this).apply {
+                background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(ok); setStroke(dp(2), Color.WHITE) }
+            }, FrameLayout.LayoutParams(dp(13), dp(13), Gravity.BOTTOM or Gravity.END).apply { bottomMargin = dp(3); rightMargin = dp(3) })
+        }
+        return cell
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState); account = AccountSync(this); loadLocalCart()
         val code = intent.getStringExtra("code")
@@ -104,7 +122,7 @@ class MainActivity : Activity() {
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(8), dp(12), dp(8)); setBackgroundColor(Color.WHITE) }
         header.addView(TextView(this).apply { text = "‹"; textSize = 34f; setTextColor(primary); gravity = Gravity.CENTER; setOnClickListener { startActivity(Intent(this@MainActivity, HomeActivity::class.java)); finish() } }, LinearLayout.LayoutParams(dp(42), dp(48)))
         header.addView(label(title, 20f, primary, true), LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(4) })
-        header.addView(TextView(this).apply { text = "👤"; textSize = 19f; gravity = Gravity.CENTER; background = bg(Color.rgb(255, 240, 234), 22); setOnClickListener { showProfile() } }, LinearLayout.LayoutParams(dp(44), dp(44))); outer.addView(header)
+        header.addView(profileIconCell(), LinearLayout.LayoutParams(dp(44), dp(44))); outer.addView(header)
         val scroll = ScrollView(this); val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(12), dp(14), dp(18)) }; scroll.addView(content); outer.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         val nav = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(Color.WHITE); elevation = dp(8).toFloat() }
         listOf("⌂\nTrang chủ", "▦\nThực đơn", "🛒\nGiỏ hàng", "▤\nĐơn hàng", "♙\nTài khoản").forEachIndexed { i, name ->
@@ -297,13 +315,25 @@ class MainActivity : Activity() {
         }
     }
 
-    // Đặt hàng: nhập địa chỉ -> order_preview (server tính lại giá/tồn kho) -> create_order (kèm Idempotency-Key).
+    // Đặt hàng: nhập địa chỉ -> order_preview (server tính lại giá/tồn kho, kiểm
+    // tra khoảng cách giao hàng nếu có) -> create_order (kèm Idempotency-Key).
     private fun showCheckout() {
         if (!account.isLoggedIn()) { toast("Vui lòng đăng nhập để đặt hàng"); showLogin(); return }
         val s = shell("Xác nhận đặt hàng", 2); setContentView(s); val c = contentOf(s)
         c.addView(label("Thông tin giao hàng", 18f, dark, true))
-        val address = EditText(this).apply { hint = "Địa chỉ giao hàng"; setText(lastAddress()); textSize = 15f; setPadding(dp(12), dp(10), dp(12), dp(10)); background = bg(Color.WHITE, 12) }
-        val time = EditText(this).apply { hint = "Giờ giao mong muốn (để trống = giao ngay)"; textSize = 15f; setPadding(dp(12), dp(10), dp(12), dp(10)); background = bg(Color.WHITE, 12) }
+
+        // Thông báo về khoảng cách giao hàng — nhắc khách ghi rõ, đầy đủ địa chỉ
+        // (số nhà, đường, phường/xã, quận/huyện...) để hệ thống xác định đúng
+        // khoảng cách. Nếu địa chỉ vượt quá phạm vi giao hàng của quán, hệ
+        // thống sẽ báo rõ lý do ở bước "Xem lại tổng tiền" bên dưới và không
+        // cho đặt hàng tiếp.
+        val noticeBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = bg(Color.rgb(255, 244, 230), 12); setPadding(dp(12), dp(10), dp(12), dp(10)) }
+        noticeBox.addView(label("🚴 Lưu ý khoảng cách giao hàng", 14f, Color.rgb(180, 95, 6), true))
+        noticeBox.addView(label("Vui lòng ghi rõ, đầy đủ địa chỉ (số nhà, đường, phường/xã, tỉnh/thành) để hệ thống xác nhận chính xác khoảng cách giao hàng. Quán chỉ giao hàng trong bán kính ${String.format("%.0f", DistanceHelper.MAX_DELIVERY_KM)}km từ ${DistanceHelper.STORE_ADDRESS.substringBefore(",")} — nếu địa chỉ vượt quá phạm vi này, đơn hàng sẽ không đặt được.", 12.5f, Color.rgb(120, 76, 20)).apply { setPadding(0, dp(3), 0, 0) })
+        c.addView(noticeBox, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8); bottomMargin = dp(10) })
+
+        val address = EditText(this).apply { hint = "Địa chỉ giao hàng (số nhà, đường, phường/xã...)"; setText(lastAddress()); textSize = 15f; setPadding(dp(12), dp(10), dp(12), dp(10)); background = bg(Color.WHITE, 12) }
+        val time = EditText(this).apply { hint = "Giờ giao hàng mong muốn (bắt buộc)"; textSize = 15f; setPadding(dp(12), dp(10), dp(12), dp(10)); background = bg(Color.WHITE, 12) }
         val note = EditText(this).apply { hint = "Ghi chú cho quán (không bắt buộc)"; textSize = 15f; setPadding(dp(12), dp(10), dp(12), dp(10)); background = bg(Color.WHITE, 12) }
         listOf(address, time, note).forEach { c.addView(it, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) }) }
 
@@ -317,16 +347,55 @@ class MainActivity : Activity() {
         }
 
         val previewBtn = button("Xem lại tổng tiền") {
-            summaryBox.removeAllViews(); val loadingView = loading(summaryBox, "Đang kiểm tra đơn hàng...")
+            if (address.text.toString().trim().isBlank()) { toast("Vui lòng nhập địa chỉ giao hàng"); return@button }
+            // Giờ giao hàng là bắt buộc: chặn ngay tại bước xem lại tổng tiền
+            // nếu khách chưa nhập, không để trống mặc định "giao ngay" nữa.
+            if (time.text.toString().trim().isBlank()) { toast("Vui lòng nhập giờ giao hàng"); return@button }
+            summaryBox.removeAllViews(); val loadingView = loading(summaryBox, "Đang kiểm tra đơn hàng & khoảng cách giao hàng...")
             executor.execute {
                 val body = JSONObject().put("address", address.text.toString().trim()).put("items", itemsJson()).toString()
                 val r = account.request("order_preview", "POST", body)
+                val data0 = r.optJSONObject("data") ?: JSONObject()
+                // Nếu server chưa tự tính khoảng cách (chưa có distance_km),
+                // app tự geocode địa chỉ quán + địa chỉ khách để tính khoảng
+                // cách dự phòng, áp giới hạn giao hàng DistanceHelper.MAX_DELIVERY_KM.
+                var clientDistance: Double? = null
+                var clientDistanceFailed = false
+                if (r.optBoolean("ok") && !data0.has("distance_km")) {
+                    clientDistance = DistanceHelper.distanceFromStoreKm(address.text.toString().trim())
+                    clientDistanceFailed = clientDistance == null
+                }
                 runOnUiThread {
                     summaryBox.removeView(loadingView)
                     if (!r.optBoolean("ok")) { summaryBox.addView(label(r.optString("message", "Không thể tính đơn hàng."), 14f, danger)); return@runOnUiThread }
-                    val total = r.optJSONObject("data")?.optInt("total") ?: 0
+                    val data = data0
+                    val total = data.optInt("total")
+                    // Ưu tiên khoảng cách do server tính (distance_km /
+                    // max_distance_km) nếu có; nếu không thì dùng khoảng cách
+                    // ước lượng tính ngay trên app (DistanceHelper) so với
+                    // giới hạn giao hàng tối đa 15km.
+                    var outOfRange = false
+                    if (data.has("distance_km")) {
+                        val distance = data.optDouble("distance_km")
+                        val maxDistance = if (data.has("max_distance_km")) data.optDouble("max_distance_km") else DistanceHelper.MAX_DELIVERY_KM
+                        outOfRange = distance > maxDistance
+                        val distText = "📍 Khoảng cách giao hàng: ${String.format("%.1f", distance)} km (tối đa ${String.format("%.1f", maxDistance)} km)"
+                        summaryBox.addView(label(distText, 13.5f, if (outOfRange) danger else ok, true))
+                    } else if (clientDistance != null) {
+                        val distance = clientDistance
+                        outOfRange = distance > DistanceHelper.MAX_DELIVERY_KM
+                        val distText = "📍 Khoảng cách giao hàng (ước tính): ${String.format("%.1f", distance)} km (tối đa ${String.format("%.1f", DistanceHelper.MAX_DELIVERY_KM)} km)"
+                        summaryBox.addView(label(distText, 13.5f, if (outOfRange) danger else ok, true))
+                    } else if (clientDistanceFailed) {
+                        summaryBox.addView(label("⚠️ Không thể xác định chính xác khoảng cách từ địa chỉ này. Vui lòng ghi rõ số nhà, tên đường, phường/xã, tỉnh/thành để hệ thống xác nhận đúng khoảng cách giao hàng.", 12.5f, Color.rgb(180, 95, 6)))
+                    }
+                    if (outOfRange) {
+                        summaryBox.addView(label("❌ Địa chỉ này cách quán quá ${String.format("%.0f", DistanceHelper.MAX_DELIVERY_KM)}km, nằm ngoài phạm vi giao hàng. Vui lòng kiểm tra lại địa chỉ hoặc chọn địa chỉ gần hơn.", 13.5f, danger).apply { setPadding(0, dp(4), 0, dp(4)) })
+                        return@runOnUiThread
+                    }
                     summaryBox.addView(label("Tổng tiền: ${money(total)}", 19f, primary, true))
                     summaryBox.addView(button("✅ Đặt hàng ngay") {
+                        if (time.text.toString().trim().isBlank()) { toast("Vui lòng nhập giờ giao hàng"); return@button }
                         summaryBox.addView(label("⏳ Đang tạo đơn hàng...", 14f, secondary))
                         val idem = UUID.randomUUID().toString()
                         val orderBody = JSONObject().put("address", address.text.toString().trim())

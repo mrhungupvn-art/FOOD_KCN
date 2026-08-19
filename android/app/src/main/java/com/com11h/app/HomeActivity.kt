@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
+import android.view.View
 import android.view.animation.AnimationUtils
 import android.view.inputmethod.EditorInfo
 import android.widget.*
@@ -39,6 +40,10 @@ class HomeActivity : Activity() {
     // Badge số lượng trên icon 🛒 Giỏ hàng ở thanh điều hướng — cập nhật mỗi khi
     // dựng lại trang chủ và mỗi khi quay lại trang chủ từ màn hình khác (onResume).
     private var cartBadge: TextView? = null
+    // Icon 👤 Tài khoản ở góc trên header — đổi màu nền + có chấm xanh khi khách
+    // đã đăng nhập, để phân biệt rõ với lúc chưa đăng nhập.
+    private var profileIcon: TextView? = null
+    private var profileDot: View? = null
     // Khung chứa "Món ăn phổ biến" — giữ lại tham chiếu để có thể tải & xáo lại
     // danh sách món mỗi khi khách quay lại trang chủ (onResume), không chỉ lúc
     // dựng trang lần đầu.
@@ -51,11 +56,11 @@ class HomeActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); account = AccountSync(this); showSplash() }
     override fun onDestroy() { handler.removeCallbacksAndMessages(null); executor.shutdownNow(); super.onDestroy() }
-    // Khách có thể đã thêm/bớt món ở màn Thực đơn hoặc Giỏ hàng rồi bấm Back
-    // quay lại đây (không tạo lại Activity) — cập nhật badge cho khớp giỏ hàng mới
-    // nhất, đồng thời tải & xáo lại "Món ăn phổ biến" để mỗi lần quay về trang chủ
-    // khách luôn thấy các món khác nhau, không cố định mãi cùng vài món.
-    override fun onResume() { super.onResume(); refreshCartBadge(); loadPopularFoods() }
+    // Khách có thể đã thêm/bớt món ở màn Thực đơn hoặc Giỏ hàng, hoặc vừa đăng
+    // nhập/đăng xuất, rồi bấm Back quay lại đây (không tạo lại Activity) — cập
+    // nhật badge giỏ hàng, icon tài khoản và xáo lại "Món ăn phổ biến" để mỗi
+    // lần quay về trang chủ khách luôn thấy các món khác nhau.
+    override fun onResume() { super.onResume(); refreshCartBadge(); refreshProfileIcon(); loadPopularFoods() }
 
     /** Cập nhật số lượng (badge đỏ) trên icon 🛒 Giỏ hàng ở thanh điều hướng, đọc từ giỏ hàng cục bộ đã lưu. */
     private fun refreshCartBadge() {
@@ -64,6 +69,13 @@ class HomeActivity : Activity() {
             text = if (n > 99) "99+" else n.toString()
             visibility = if (n > 0) android.view.View.VISIBLE else android.view.View.GONE
         }
+    }
+
+    /** Cập nhật màu nền + chấm trạng thái trên icon 👤 Tài khoản theo việc khách đã đăng nhập hay chưa. */
+    private fun refreshProfileIcon() {
+        val loggedIn = account.isLoggedIn()
+        profileIcon?.background = bg(if (loggedIn) Color.rgb(224, 247, 233) else Color.rgb(255, 240, 234), 22)
+        profileDot?.visibility = if (loggedIn) android.view.View.VISIBLE else android.view.View.GONE
     }
 
     private fun showSplash() {
@@ -86,7 +98,16 @@ class HomeActivity : Activity() {
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), dp(9), dp(14), dp(8)); setBackgroundColor(Color.WHITE) }
         header.addView(ImageView(this).apply { setImageResource(R.drawable.com11h_logo); scaleType = ImageView.ScaleType.FIT_CENTER }, LinearLayout.LayoutParams(dp(48), dp(48)))
         header.addView(label("Cơm 11h", 20f, primary, true), LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(8) })
-        header.addView(TextView(this).apply { text = "👤"; textSize = 20f; gravity = Gravity.CENTER; setTextColor(primary); background = bg(Color.rgb(255, 240, 234), 22); setOnClickListener { open("profile") } }, LinearLayout.LayoutParams(dp(44), dp(44)))
+        val profileCell = FrameLayout(this)
+        profileIcon = TextView(this).apply { text = "👤"; textSize = 20f; gravity = Gravity.CENTER; setTextColor(primary); setOnClickListener { open("profile") } }
+        profileCell.addView(profileIcon, FrameLayout.LayoutParams(dp(44), dp(44)))
+        profileDot = View(this).apply {
+            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.rgb(46, 125, 50)); setStroke(dp(2), Color.WHITE) }
+            visibility = android.view.View.GONE
+        }
+        profileCell.addView(profileDot, FrameLayout.LayoutParams(dp(13), dp(13), Gravity.BOTTOM or Gravity.END).apply { bottomMargin = dp(3); rightMargin = dp(3) })
+        refreshProfileIcon()
+        header.addView(profileCell, LinearLayout.LayoutParams(dp(44), dp(44)))
         outer.addView(header)
 
         val scroll = ScrollView(this)
@@ -271,8 +292,6 @@ class HomeActivity : Activity() {
         setContentView(shell)
         val scroll = shell.getChildAt(1) as ScrollView
         val content = scroll.getChildAt(0) as LinearLayout
-        content.addView(label("Giao đến", 13f, secondary))
-        content.addView(label("📍 Địa chỉ giao hàng của bạn", 15f, text, true).apply { setPadding(0, 0, 0, dp(10)) })
         content.addView(searchBox(), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
 
         val bannerContainer = FrameLayout(this)
