@@ -74,6 +74,9 @@ class HomeActivity : SessionActivity() {
     }
     // Dừng dải "Menu Vip" tự trôi khi rời màn hình (đỡ tốn pin/CPU khi không hiển thị).
     override fun onPause() { vipAutoScrollRunnable?.let { handler.removeCallbacks(it) }; super.onPause() }
+    // Phiên bị hết hạn NGAY trên Trang chủ (khách đứng yên quá lâu) -> icon 👤
+    // đang hiện chấm xanh "đã đăng nhập" cần được cập nhật lại ngay lập tức.
+    override fun onSessionExpired() { refreshProfileIcon() }
 
     /** Cập nhật số lượng (badge đỏ) trên icon 🛒 Giỏ hàng ở thanh điều hướng, đọc từ giỏ hàng cục bộ đã lưu. */
     private fun refreshCartBadge() {
