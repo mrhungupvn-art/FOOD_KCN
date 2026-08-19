@@ -1,6 +1,5 @@
 package com.com11h.app
 
-import android.app.Activity
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
@@ -22,7 +21,7 @@ import java.util.concurrent.Executors
  * (dùng chung logic nghiệp vụ với web qua core.php, xem AccountSync.kt).
  * Chỉ có giỏ hàng (trước khi đặt) là lưu tạm trên máy.
  */
-class MainActivity : Activity() {
+class MainActivity : SessionActivity() {
     private lateinit var account: AccountSync
     private val executor = Executors.newSingleThreadExecutor()
     private val handler = Handler(Looper.getMainLooper())

@@ -1,6 +1,5 @@
 package com.com11h.app
 
-import android.app.Activity
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
@@ -27,7 +26,7 @@ import java.util.concurrent.Executors
  *   - Ô tìm kiếm: có nút bấm 🔍 (và bấm "Tìm kiếm" trên bàn phím) để mở
  *     màn Thực đơn và lọc sẵn theo từ khoá đã nhập.
  */
-class HomeActivity : Activity() {
+class HomeActivity : SessionActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private val executor = Executors.newSingleThreadExecutor()
     private lateinit var account: AccountSync

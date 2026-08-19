@@ -1,6 +1,5 @@
 package com.com11h.app
 
-import android.app.Activity
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
@@ -19,7 +18,7 @@ import android.widget.TextView
  *   - "image": URL ảnh banner (bắt buộc)
  *   - "title": tiêu đề banner (tuỳ chọn, hiển thị đè phía dưới ảnh)
  */
-class BannerViewActivity : Activity() {
+class BannerViewActivity : SessionActivity() {
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {

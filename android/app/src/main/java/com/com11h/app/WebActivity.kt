@@ -1,6 +1,5 @@
 package com.com11h.app
 
-import android.app.Activity
 import android.content.Context
 import android.graphics.Color
 import android.os.Bundle
@@ -27,7 +26,7 @@ import java.util.concurrent.Executors
  * If there is no app token, the web page opens normally so guests can still
  * browse the menu and log in on the website.
  */
-class WebActivity : Activity() {
+class WebActivity : SessionActivity() {
     private val executor = Executors.newSingleThreadExecutor()
     private lateinit var webView: WebView
     private lateinit var progressBar: ProgressBar

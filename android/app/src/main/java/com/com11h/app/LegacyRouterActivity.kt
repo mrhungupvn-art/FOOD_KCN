@@ -1,11 +1,10 @@
 package com.com11h.app
 
-import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 
 /** Small navigation bridge while the native shell and existing business module coexist. */
-class LegacyRouterActivity : Activity() {
+class LegacyRouterActivity : SessionActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val screen = intent.getStringExtra("screen")
