@@ -207,7 +207,7 @@ class HomeActivity : SessionActivity() {
         val outer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bgColor) }
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), dp(9), dp(14), dp(8)); setBackgroundColor(Color.WHITE) }
         header.addView(ImageView(this).apply { setImageResource(R.drawable.com11h_logo); scaleType = ImageView.ScaleType.FIT_CENTER }, LinearLayout.LayoutParams(dp(48), dp(48)))
-        header.addView(label("Cơm 11h xin chào ! ", 30f, primary, true), LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(8) })
+        header.addView(label("Cơm 11h xin chào ! ", 20f, primary, true), LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(8) })
         val profileCell = FrameLayout(this)
         profileIcon = TextView(this).apply { text = "👤"; textSize = 20f; gravity = Gravity.CENTER; setTextColor(primary); setOnClickListener { open("profile") } }
         profileCell.addView(profileIcon, FrameLayout.LayoutParams(dp(44), dp(44)))
@@ -545,7 +545,7 @@ class HomeActivity : SessionActivity() {
         // Dùng AspectRatioFrameLayout để khung module luôn khớp đúng pixel
         // với khung trình phát video, không bị lệch dù xoay màn hình.
         val newsSection = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
-        newsSection.addView(label("📰 Tin Tức", 21f, text, true).apply { setPadding(0, 0, 0, dp(9)) })
+        newsSection.addView(label("Thư Giản Âm Nhạc ", 21f, text, true).apply { setPadding(0, 0, 0, dp(9)) })
         val newsContainer = AspectRatioFrameLayout(this, 16f, 9f).apply { background = bg(Color.BLACK, 18); clipToOutline = true }
         newsSection.addView(newsContainer, LinearLayout.LayoutParams(-1, -2))
         content.addView(newsSection, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(16) })
