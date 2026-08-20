@@ -91,7 +91,7 @@ class HomeActivity : SessionActivity() {
     private fun bg(color: Int, radius: Int = 18) = GradientDrawable().apply { setColor(color); cornerRadius = dp(radius).toFloat() }
 
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); account = AccountSync(this); showSplash() }
-    override fun onDestroy() { handler.removeCallbacksAndMessages(null); executor.shutdownNow(); newsWebView?.destroy(); super.onDestroy() }
+    override fun onDestroy() { handler.removeCallbacksAndMessages(null); executor.shutdownNow(); try { newsWebView?.destroy() } catch (_: Exception) { }; super.onDestroy() }
     // Khách có thể đã thêm/bớt món ở màn Thực đơn hoặc Giỏ hàng, hoặc vừa đăng
     // nhập/đăng xuất, rồi bấm Back quay lại đây (không tạo lại Activity) — cập
     // nhật badge giỏ hàng, icon tài khoản và xáo lại "Món ăn phổ biến" để mỗi
@@ -99,10 +99,10 @@ class HomeActivity : SessionActivity() {
     override fun onResume() {
         super.onResume(); refreshCartBadge(); refreshProfileIcon(); loadPopularFoods()
         vipAutoScrollRunnable?.let { handler.post(it) }
-        newsWebView?.onResume()
+        try { newsWebView?.onResume() } catch (_: Exception) { }
     }
     // Dừng dải "Menu Vip" tự trôi + tạm dừng video Tin Tức khi rời màn hình (đỡ tốn pin/CPU khi không hiển thị).
-    override fun onPause() { vipAutoScrollRunnable?.let { handler.removeCallbacks(it) }; newsWebView?.onPause(); super.onPause() }
+    override fun onPause() { vipAutoScrollRunnable?.let { handler.removeCallbacks(it) }; try { newsWebView?.onPause() } catch (_: Exception) { }; super.onPause() }
     // Phiên bị hết hạn NGAY trên Trang chủ (khách đứng yên quá lâu) -> icon 👤
     // đang hiện chấm xanh "đã đăng nhập" cần được cập nhật lại ngay lập tức.
     override fun onSessionExpired() { refreshProfileIcon() }
@@ -533,43 +533,58 @@ class HomeActivity : SessionActivity() {
         executor.execute {
             val r = try { account.request("news_video") } catch (_: Exception) { null }
             runOnUiThread {
-                if (section != this.newsSectionRef) return@runOnUiThread // màn hình đã đổi/hủy trong lúc chờ tải
-                val video = r?.optJSONObject("data")?.optJSONObject("video")
-                val embedUrl = video?.optString("embed_url")?.trim().orEmpty()
-                if (r == null || !r.optBoolean("ok") || embedUrl.isBlank()) {
+                // Toàn bộ khối này được bọc try/catch: một số máy Android (đặc
+                // biệt máy phổ thông đã bị tắt/đóng băng app hệ thống "Android
+                // System WebView", hoặc app đó đang giữa đợt tự cập nhật) sẽ
+                // ném exception ngay khi khởi tạo WebView(this). Nếu không bắt
+                // lỗi ở đây, exception đó sẽ làm crash toàn bộ Activity Trang
+                // chủ (kéo theo mất luôn Banner và mọi module khác phía trên,
+                // không riêng gì Tin Tức) — vì vậy TUYỆT ĐỐI không được để lỗi
+                // của module Tin Tức thoát ra ngoài phạm vi của chính nó.
+                try {
+                    if (section != this.newsSectionRef) return@runOnUiThread // màn hình đã đổi/hủy trong lúc chờ tải
+                    val video = r?.optJSONObject("data")?.optJSONObject("video")
+                    val embedUrl = video?.optString("embed_url")?.trim().orEmpty()
+                    if (r == null || !r.optBoolean("ok") || embedUrl.isBlank()) {
+                        section.visibility = View.GONE
+                        return@runOnUiThread
+                    }
+                    val title = video?.optString("title").orEmpty()
+                    // Không cần tự đo/gán width-height thủ công nữa: newsContainer
+                    // là AspectRatioFrameLayout, tự khớp đúng khung 16:9 trong
+                    // onMeasure — WebView chỉ cần MATCH_PARENT là phủ khít khung.
+                    try { newsWebView?.destroy() } catch (_: Exception) { }
+                    val webView = WebView(this).apply {
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.mediaPlaybackRequiresUserGesture = false
+                        settings.setSupportZoom(false)
+                        settings.builtInZoomControls = false
+                        settings.displayZoomControls = false
+                        // Referer/Origin hợp lệ để né lỗi YouTube 153, xem newsVideoHtml().
+                        settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                        // Tắt hẳn thanh cuộn/hiệu ứng overscroll của WebView — nếu
+                        // không, vài pixel viền cuộn có thể làm video trông lệch
+                        // so với khung bo góc của module.
+                        isVerticalScrollBarEnabled = false
+                        isHorizontalScrollBarEnabled = false
+                        overScrollMode = View.OVER_SCROLL_NEVER
+                        webViewClient = WebViewClient()
+                        webChromeClient = WebChromeClient()
+                        setBackgroundColor(Color.BLACK)
+                        contentDescription = title
+                        loadDataWithBaseURL(SITE_URL + "/", newsVideoHtml(embedUrl), "text/html", "utf-8", null)
+                    }
+                    container.removeAllViews()
+                    container.addView(webView, FrameLayout.LayoutParams(-1, -1))
+                    newsWebView = webView
+                    section.visibility = View.VISIBLE
+                } catch (e: Exception) {
+                    // WebView không dựng được (hoặc lỗi bất kỳ khác) trên máy này
+                    // -> chỉ ẩn khối Tin Tức, các module khác (Banner, Menu Vip,
+                    // Món ăn phổ biến...) vẫn hiển thị bình thường.
                     section.visibility = View.GONE
-                    return@runOnUiThread
                 }
-                val title = video?.optString("title").orEmpty()
-                section.visibility = View.VISIBLE
-                // Không cần tự đo/gán width-height thủ công nữa: newsContainer
-                // là AspectRatioFrameLayout, tự khớp đúng khung 16:9 trong
-                // onMeasure — WebView chỉ cần MATCH_PARENT là phủ khít khung.
-                newsWebView?.destroy()
-                val webView = WebView(this).apply {
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    settings.mediaPlaybackRequiresUserGesture = false
-                    settings.setSupportZoom(false)
-                    settings.builtInZoomControls = false
-                    settings.displayZoomControls = false
-                    // Referer/Origin hợp lệ để né lỗi YouTube 153, xem newsVideoHtml().
-                    settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                    // Tắt hẳn thanh cuộn/hiệu ứng overscroll của WebView — nếu
-                    // không, vài pixel viền cuộn có thể làm video trông lệch
-                    // so với khung bo góc của module.
-                    isVerticalScrollBarEnabled = false
-                    isHorizontalScrollBarEnabled = false
-                    overScrollMode = View.OVER_SCROLL_NEVER
-                    webViewClient = WebViewClient()
-                    webChromeClient = WebChromeClient()
-                    setBackgroundColor(Color.BLACK)
-                    contentDescription = title
-                    loadDataWithBaseURL(SITE_URL + "/", newsVideoHtml(embedUrl), "text/html", "utf-8", null)
-                }
-                container.removeAllViews()
-                container.addView(webView, FrameLayout.LayoutParams(-1, -1))
-                newsWebView = webView
             }
         }
     }
