@@ -5,7 +5,7 @@
             android:name=".HomeActivity"
             android:screenOrientation="portrait"
             android:exported="true"
-            android:supportsPictureInPicture="true"
+            android:launchMode="singleTask"
             android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboardHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
