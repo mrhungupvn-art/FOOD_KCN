@@ -475,7 +475,39 @@ class HomeActivity : SessionActivity() {
      * khối "Tin Tức" (kể cả tiêu đề) để không để lại khoảng trống thừa.
      * Chiều cao khung video tự tính theo đúng bề rộng thực tế của khối
      * (bằng bề rộng "Menu Vip") nhân tỉ lệ 9:16 (video ngang chuẩn YouTube).
+     *
+     * newsVideoHtml() bên dưới bọc embed_url trong 1 trang HTML tối giản
+     * (nền đen, iframe phủ kín) rồi nạp qua loadDataWithBaseURL với baseUrl
+     * là chính tên miền website. Đây là cách bắt buộc để né lỗi YouTube
+     * "153 — Video player configuration error": nếu gọi thẳng
+     * webView.loadUrl(embedUrl), WebView KHÔNG gửi header Referer/Origin
+     * hợp lệ nên YouTube từ chối phát video; loadDataWithBaseURL khiến
+     * WebView coi baseUrl là "trang chứa" nên iframe bên trong có Referer
+     * hợp lệ.
      */
+    private fun newsVideoHtml(embedUrl: String): String {
+        val safeUrl = embedUrl.replace("\"", "&quot;")
+        return """
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+              <style>
+                html, body { margin:0; padding:0; background:#000; overflow:hidden; }
+                iframe { position:absolute; top:0; left:0; width:100%; height:100%; border:0; }
+              </style>
+            </head>
+            <body>
+              <iframe src="$safeUrl"
+                referrerpolicy="strict-origin-when-cross-origin"
+                allow="autoplay; encrypted-media; picture-in-picture"
+                allowfullscreen></iframe>
+            </body>
+            </html>
+        """.trimIndent()
+    }
+
     private fun loadNewsVideo(section: LinearLayout, container: FrameLayout) {
         executor.execute {
             val r = try { account.request("news_video") } catch (_: Exception) { null }
@@ -503,11 +535,13 @@ class HomeActivity : SessionActivity() {
                         settings.setSupportZoom(false)
                         settings.builtInZoomControls = false
                         settings.displayZoomControls = false
+                        // Referer/Origin hợp lệ để né lỗi YouTube 153, xem newsVideoHtml().
+                        settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                         webViewClient = WebViewClient()
                         webChromeClient = WebChromeClient()
                         setBackgroundColor(Color.BLACK)
                         contentDescription = title
-                        loadUrl(embedUrl)
+                        loadDataWithBaseURL(SITE_URL + "/", newsVideoHtml(embedUrl), "text/html", "utf-8", null)
                     }
                     container.removeAllViews()
                     container.addView(webView, FrameLayout.LayoutParams(-1, -1))
