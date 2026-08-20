@@ -1,4 +1,24 @@
-# COM11H Android v1.6.0
+# COM11H Android v1.7.0
+
+## Ghi chú bản 1.7.0 (so với 1.6.0)
+- **Đăng ký tài khoản:** đổi sang xác thực OTP — sau khi nhập họ tên/SĐT/mật
+  khẩu, app gọi `register_request_otp` để gửi mã 6 số về SĐT, hiện màn hình
+  nhập mã (có nút "Gửi lại mã"), rồi mới gọi `register` (kèm `otp`) để thật
+  sự tạo tài khoản.
+- **Quên mật khẩu (MỚI):** màn Đăng nhập có thêm nút "Quên mật khẩu?" — nhập
+  SĐT, nhận mã OTP, nhập mã + mật khẩu mới để đặt lại (`password_reset_request_otp`
+  rồi `password_reset`). Đặt lại thành công sẽ đăng nhập luôn trên thiết bị
+  hiện tại và tự đăng xuất các thiết bị khác đang đăng nhập tài khoản đó.
+- **Bắt buộc:** phải upload `api/index.php` mới (đã thêm các action
+  `register_request_otp`, `password_reset_request_otp`, `password_reset`, và
+  action `register` giờ nhận thêm trường `otp`) cùng `core.php`, `config.php`
+  lên server TRƯỚC KHI phát hành app 1.7.0, nếu không app sẽ nhận lỗi "hành
+  động không xác định" khi gọi các action mới này (xem `HUONG_DAN_OTP.md`
+  phía backend).
+- Sau khi bản 1.7.0 được phát hành và đa số khách đã cập nhật, đổi hằng số
+  `OTP_REQUIRED_FOR_APP_REGISTER` sang `true` trong `config.php` phía server
+  để bắt buộc OTP cho mọi lượt đăng ký từ app (bản app cũ hơn 1.7.0 sẽ không
+  đăng ký được nữa sau khi đổi — đây là điều nên xảy ra sau khi rollout xong).
 
 ## Ghi chú bản 1.6.0 (so với 1.5.2)
 - **Trang chủ – ô tìm kiếm:** thêm nút bấm 🔍 cạnh ô "Tìm món ăn..." (trước đó
