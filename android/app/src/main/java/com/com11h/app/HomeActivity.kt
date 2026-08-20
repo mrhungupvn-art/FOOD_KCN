@@ -11,7 +11,6 @@ import android.view.Gravity
 import android.view.View
 import android.view.animation.AnimationUtils
 import android.view.inputmethod.EditorInfo
-import android.webkit.WebView
 import android.widget.*
 import org.json.JSONArray
 import org.json.JSONObject
@@ -208,18 +207,7 @@ class HomeActivity : SessionActivity() {
         val outer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bgColor) }
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), dp(9), dp(14), dp(8)); setBackgroundColor(Color.WHITE) }
         header.addView(ImageView(this).apply { setImageResource(R.drawable.com11h_logo); scaleType = ImageView.ScaleType.FIT_CENTER }, LinearLayout.LayoutParams(dp(48), dp(48)))
-        header.addView(label("Cơm 11h", 20f, primary, true), LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) })
-        // Con mèo chớp mắt (thay cho phần trống bên phải chữ "Cơm 11h") — nạp
-        // từ assets/com11h_blink.html, ảnh tĩnh + 2 mí mắt CSS animation.
-        header.addView(WebView(this).apply {
-            setBackgroundColor(Color.TRANSPARENT)
-            settings.javaScriptEnabled = false
-            settings.loadWithOverviewMode = true
-            settings.useWideViewPort = true
-            isVerticalScrollBarEnabled = false
-            isHorizontalScrollBarEnabled = false
-            loadUrl("file:///android_asset/com11h_blink.html")
-        }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginStart = dp(6) })
+        header.addView(label("Cơm 11h", 20f, primary, true), LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(8) })
         val profileCell = FrameLayout(this)
         profileIcon = TextView(this).apply { text = "👤"; textSize = 20f; gravity = Gravity.CENTER; setTextColor(primary); setOnClickListener { open("profile") } }
         profileCell.addView(profileIcon, FrameLayout.LayoutParams(dp(44), dp(44)))

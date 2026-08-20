@@ -21,34 +21,23 @@ import android.widget.TextView
 import kotlin.math.abs
 
 /**
- * Quản lý video "📰 Tin Tức" nổi TRONG APP — thay cho Picture-in-Picture của
- * hệ điều hành (PiP do Android/hãng máy quản lý, mỗi máy xử lý khác nhau,
- * không phải lúc nào cũng kéo-thả mượt).
+ * Quản lý video "📰 Tin Tức" TRONG APP, chỉ trên Trang chủ.
  *
  * Ý tưởng: chỉ giữ ĐÚNG MỘT WebView phát video trong suốt vòng đời, rồi
- * "chuyển nhà" nó (removeView ở nơi cũ -> addView ở nơi mới) giữa 2 trạng thái:
+ * "chuyển nhà" nó (removeView ở nơi cũ -> addView ở nơi mới) giữa 2 trạng thái,
+ * cả hai đều diễn ra NGAY TRÊN Trang chủ:
  *
- *   1) INLINE — nằm ngay trong khung "📰 Tin Tức" của Trang chủ, hiển thị
- *      bình thường như một module trên trang. Áp dụng cả khi khung video vẫn
- *      đang nằm trong tầm nhìn của khách trên Trang chủ.
+ *   1) INLINE — nằm ngay trong khung "📰 Tin Tức", hiển thị bình thường như
+ *      một module trên trang, khi khung video còn trong tầm nhìn.
  *
- *   2) BUBBLE — bong bóng nhỏ, kéo-thả tự do, đè nổi lên bất kỳ màn hình nào
- *      khác trong app (Thực đơn, Giỏ hàng, Đơn hàng, Tài khoản...), hoặc đè
- *      lên chính Trang chủ khi khách đã cuộn khung video ra khỏi màn hình
- *      (kiểu "docking" giống trình mini-player).
+ *   2) BUBBLE — bong bóng nhỏ, kéo-thả tự do, "docking" đè lên góc Trang chủ
+ *      khi khách đã cuộn khung video ra khỏi tầm nhìn (kiểu mini-player) —
+ *      xem HomeActivity.checkNewsDockState().
  *
- * Bong bóng được add THẲNG vào decor view của chính Activity đang hiển thị
- * (activity.window.decorView) — KHÔNG dùng WindowManager toàn hệ thống — nên
- * KHÔNG cần xin quyền "Hiển thị trên ứng dụng khác" (SYSTEM_ALERT_WINDOW).
- * Mỗi khi khách chuyển từ màn A sang màn B trong app, SessionActivity (lớp
- * cha chung của mọi Activity) tự gọi onActivityPaused(A) rồi
- * onActivityResumed(B), khiến bong bóng "trôi" từ decor của A sang decor của
- * B — tạo cảm giác nổi liền mạch xuyên suốt toàn app.
- *
- * Nếu khách rời hẳn app (về màn hình chính hệ thống, mở app khác) thì không
- * có Activity nào trong app resume lại để "đón" bong bóng — sau một khoảng
- * ngắn không ai giữ WebView, video sẽ tự tạm dừng (đỡ tốn pin/dữ liệu), và tự
- * phát tiếp ngay khi khách quay lại app.
+ * Khi khách bấm sang màn hình KHÁC trong app (Thực đơn, Giỏ hàng, Đơn hàng,
+ * Tài khoản...) sẽ KHÔNG còn bong bóng nổi đè lên màn hình đó nữa — video chỉ
+ * tự tạm dừng sau một khoảng ngắn (đỡ tốn pin/dữ liệu) và tự phát tiếp ngay
+ * khi khách quay lại Trang chủ.
  */
 object FloatingVideoManager {
 
@@ -169,10 +158,18 @@ object FloatingVideoManager {
     // CHẾ ĐỘ BONG BÓNG NỔI — đè lên màn hình bất kỳ, kéo-thả tự do
     // =========================================================================
 
-    /** SessionActivity gọi ở onResume của MỌI Activity trong app. */
+    /**
+     * SessionActivity gọi ở onResume của MỌI Activity trong app.
+     *
+     * Bong bóng nổi CHỈ còn xuất hiện khi khách cuộn khung video ra khỏi tầm
+     * nhìn ngay trên Trang chủ (xem HomeActivity.checkNewsDockState()) — khi
+     * khách bấm sang màn hình khác (Thực đơn, Giỏ hàng, Đơn hàng, Tài khoản…)
+     * KHÔNG còn bong bóng đè lên màn hình đó nữa. Video sẽ tự tạm dừng sau
+     * một khoảng ngắn (xem scheduleOrphanCheck ở onActivityPaused) và tự phát
+     * tiếp ngay khi khách quay lại Trang chủ.
+     */
     fun onActivityResumed(activity: Activity) {
-        cancelOrphanCheck()
-        if (activity !is HomeActivity && isActive()) showBubble(activity)
+        if (activity is HomeActivity) cancelOrphanCheck()
     }
 
     /** SessionActivity gọi ở onPause của MỌI Activity trong app. */
