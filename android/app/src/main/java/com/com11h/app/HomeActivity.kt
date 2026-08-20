@@ -11,6 +11,9 @@ import android.view.Gravity
 import android.view.View
 import android.view.animation.AnimationUtils
 import android.view.inputmethod.EditorInfo
+import android.webkit.WebChromeClient
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.*
 import org.json.JSONArray
 import org.json.JSONObject
@@ -56,6 +59,12 @@ class HomeActivity : SessionActivity() {
     private var vipAutoScrollRunnable: Runnable? = null
     private var vipUserTouching = false
     private var vipSingleSetWidth = 0
+    // "Tin Tức" — module video YouTube thời sự lấy từ api?action=news_video,
+    // cùng bề rộng với "Menu Vip", chiều cao tự tính theo tỉ lệ 16:9 của
+    // video. Admin đổi video (bật/tắt) trên admin/news_videos.php thì app tự
+    // cập nhật theo, không cần sửa code/cập nhật APK.
+    private var newsWebView: WebView? = null
+    private var newsSectionRef: LinearLayout? = null
 
     companion object { private const val SITE_URL = "https://com11h.com" }
 
@@ -63,7 +72,7 @@ class HomeActivity : SessionActivity() {
     private fun bg(color: Int, radius: Int = 18) = GradientDrawable().apply { setColor(color); cornerRadius = dp(radius).toFloat() }
 
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); account = AccountSync(this); showSplash() }
-    override fun onDestroy() { handler.removeCallbacksAndMessages(null); executor.shutdownNow(); super.onDestroy() }
+    override fun onDestroy() { handler.removeCallbacksAndMessages(null); executor.shutdownNow(); newsWebView?.destroy(); super.onDestroy() }
     // Khách có thể đã thêm/bớt món ở màn Thực đơn hoặc Giỏ hàng, hoặc vừa đăng
     // nhập/đăng xuất, rồi bấm Back quay lại đây (không tạo lại Activity) — cập
     // nhật badge giỏ hàng, icon tài khoản và xáo lại "Món ăn phổ biến" để mỗi
@@ -71,9 +80,10 @@ class HomeActivity : SessionActivity() {
     override fun onResume() {
         super.onResume(); refreshCartBadge(); refreshProfileIcon(); loadPopularFoods()
         vipAutoScrollRunnable?.let { handler.post(it) }
+        newsWebView?.onResume()
     }
-    // Dừng dải "Menu Vip" tự trôi khi rời màn hình (đỡ tốn pin/CPU khi không hiển thị).
-    override fun onPause() { vipAutoScrollRunnable?.let { handler.removeCallbacks(it) }; super.onPause() }
+    // Dừng dải "Menu Vip" tự trôi + tạm dừng video Tin Tức khi rời màn hình (đỡ tốn pin/CPU khi không hiển thị).
+    override fun onPause() { vipAutoScrollRunnable?.let { handler.removeCallbacks(it) }; newsWebView?.onPause(); super.onPause() }
     // Phiên bị hết hạn NGAY trên Trang chủ (khách đứng yên quá lâu) -> icon 👤
     // đang hiện chấm xanh "đã đăng nhập" cần được cập nhật lại ngay lập tức.
     override fun onSessionExpired() { refreshProfileIcon() }
@@ -441,11 +451,70 @@ class HomeActivity : SessionActivity() {
         this.vipRow = vipRow
         loadVipCarousel()
 
+        // "Tin Tức" — ngay dưới "Menu Vip", cùng bề rộng, cao hơn theo tỉ lệ
+        // video 16:9. Ẩn cả khối (kể cả tiêu đề) nếu Admin chưa bật video nào.
+        val newsSection = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
+        newsSection.addView(label("📰 Tin Tức", 21f, text, true).apply { setPadding(0, 0, 0, dp(9)) })
+        val newsContainer = FrameLayout(this).apply { background = bg(Color.BLACK, 18); clipToOutline = true }
+        newsSection.addView(newsContainer, LinearLayout.LayoutParams(-1, dp(1)))
+        content.addView(newsSection, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(16) })
+        this.newsSectionRef = newsSection
+        loadNewsVideo(newsSection, newsContainer)
+
         content.addView(label("Món ăn phổ biến", 21f, text, true).apply { setPadding(0, 0, 0, dp(8)) })
         val popularBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         content.addView(popularBox)
         this.popularBox = popularBox
         loadPopularFoods()
+    }
+
+    /**
+     * Tải video "Tin Tức" đang bật từ api?action=news_video (đồng bộ với
+     * admin/news_videos.php — đổi video trên Admin thì app tự cập nhật theo,
+     * không cần cập nhật APK). Nếu Admin chưa bật video nào thì ẩn hẳn cả
+     * khối "Tin Tức" (kể cả tiêu đề) để không để lại khoảng trống thừa.
+     * Chiều cao khung video tự tính theo đúng bề rộng thực tế của khối
+     * (bằng bề rộng "Menu Vip") nhân tỉ lệ 9:16 (video ngang chuẩn YouTube).
+     */
+    private fun loadNewsVideo(section: LinearLayout, container: FrameLayout) {
+        executor.execute {
+            val r = try { account.request("news_video") } catch (_: Exception) { null }
+            runOnUiThread {
+                if (section != this.newsSectionRef) return@runOnUiThread // màn hình đã đổi/hủy trong lúc chờ tải
+                val video = r?.optJSONObject("data")?.optJSONObject("video")
+                val embedUrl = video?.optString("embed_url")?.trim().orEmpty()
+                if (r == null || !r.optBoolean("ok") || embedUrl.isBlank()) {
+                    section.visibility = View.GONE
+                    return@runOnUiThread
+                }
+                val title = video?.optString("title").orEmpty()
+                section.visibility = View.VISIBLE
+                container.post {
+                    val width = container.width.takeIf { it > 0 } ?: (resources.displayMetrics.widthPixels - dp(28))
+                    val height = width * 9 / 16
+                    container.layoutParams = (container.layoutParams as LinearLayout.LayoutParams).apply { this.height = height }
+                    container.requestLayout()
+
+                    newsWebView?.destroy()
+                    val webView = WebView(this).apply {
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.mediaPlaybackRequiresUserGesture = false
+                        settings.setSupportZoom(false)
+                        settings.builtInZoomControls = false
+                        settings.displayZoomControls = false
+                        webViewClient = WebViewClient()
+                        webChromeClient = WebChromeClient()
+                        setBackgroundColor(Color.BLACK)
+                        contentDescription = title
+                        loadUrl(embedUrl)
+                    }
+                    container.removeAllViews()
+                    container.addView(webView, FrameLayout.LayoutParams(-1, -1))
+                    newsWebView = webView
+                }
+            }
+        }
     }
 
     private fun open(screen: String) { startActivity(Intent(this, MainActivity::class.java).putExtra("screen", screen)) }
