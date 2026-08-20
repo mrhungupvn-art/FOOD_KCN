@@ -29,6 +29,25 @@ import java.util.concurrent.Executors
  *   - Ô tìm kiếm: có nút bấm 🔍 (và bấm "Tìm kiếm" trên bàn phím) để mở
  *     màn Thực đơn và lọc sẵn theo từ khoá đã nhập.
  */
+/**
+ * FrameLayout tự tính chiều cao = bề rộng × (heightRatio / widthRatio) ngay
+ * trong onMeasure — luôn khớp đúng khung mỗi lần layout (xoay màn hình, đổi
+ * kích thước...), không phụ thuộc timing của post{}/callback nên khung
+ * module (bo góc, nền đen) và khung trình phát video (WebView phủ kín bên
+ * trong) không bao giờ bị lệch pixel với nhau.
+ */
+class AspectRatioFrameLayout @JvmOverloads constructor(
+    context: android.content.Context,
+    private val widthRatio: Float = 16f,
+    private val heightRatio: Float = 9f
+) : FrameLayout(context) {
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val width = MeasureSpec.getSize(widthMeasureSpec)
+        val height = (width * heightRatio / widthRatio).toInt()
+        super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY))
+    }
+}
+
 class HomeActivity : SessionActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private val executor = Executors.newSingleThreadExecutor()
@@ -453,10 +472,12 @@ class HomeActivity : SessionActivity() {
 
         // "Tin Tức" — ngay dưới "Menu Vip", cùng bề rộng, cao hơn theo tỉ lệ
         // video 16:9. Ẩn cả khối (kể cả tiêu đề) nếu Admin chưa bật video nào.
+        // Dùng AspectRatioFrameLayout để khung module luôn khớp đúng pixel
+        // với khung trình phát video, không bị lệch dù xoay màn hình.
         val newsSection = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
         newsSection.addView(label("📰 Tin Tức", 21f, text, true).apply { setPadding(0, 0, 0, dp(9)) })
-        val newsContainer = FrameLayout(this).apply { background = bg(Color.BLACK, 18); clipToOutline = true }
-        newsSection.addView(newsContainer, LinearLayout.LayoutParams(-1, dp(1)))
+        val newsContainer = AspectRatioFrameLayout(this, 16f, 9f).apply { background = bg(Color.BLACK, 18); clipToOutline = true }
+        newsSection.addView(newsContainer, LinearLayout.LayoutParams(-1, -2))
         content.addView(newsSection, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(16) })
         this.newsSectionRef = newsSection
         loadNewsVideo(newsSection, newsContainer)
@@ -521,32 +542,34 @@ class HomeActivity : SessionActivity() {
                 }
                 val title = video?.optString("title").orEmpty()
                 section.visibility = View.VISIBLE
-                container.post {
-                    val width = container.width.takeIf { it > 0 } ?: (resources.displayMetrics.widthPixels - dp(28))
-                    val height = width * 9 / 16
-                    container.layoutParams = (container.layoutParams as LinearLayout.LayoutParams).apply { this.height = height }
-                    container.requestLayout()
-
-                    newsWebView?.destroy()
-                    val webView = WebView(this).apply {
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true
-                        settings.mediaPlaybackRequiresUserGesture = false
-                        settings.setSupportZoom(false)
-                        settings.builtInZoomControls = false
-                        settings.displayZoomControls = false
-                        // Referer/Origin hợp lệ để né lỗi YouTube 153, xem newsVideoHtml().
-                        settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                        webViewClient = WebViewClient()
-                        webChromeClient = WebChromeClient()
-                        setBackgroundColor(Color.BLACK)
-                        contentDescription = title
-                        loadDataWithBaseURL(SITE_URL + "/", newsVideoHtml(embedUrl), "text/html", "utf-8", null)
-                    }
-                    container.removeAllViews()
-                    container.addView(webView, FrameLayout.LayoutParams(-1, -1))
-                    newsWebView = webView
+                // Không cần tự đo/gán width-height thủ công nữa: newsContainer
+                // là AspectRatioFrameLayout, tự khớp đúng khung 16:9 trong
+                // onMeasure — WebView chỉ cần MATCH_PARENT là phủ khít khung.
+                newsWebView?.destroy()
+                val webView = WebView(this).apply {
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    settings.mediaPlaybackRequiresUserGesture = false
+                    settings.setSupportZoom(false)
+                    settings.builtInZoomControls = false
+                    settings.displayZoomControls = false
+                    // Referer/Origin hợp lệ để né lỗi YouTube 153, xem newsVideoHtml().
+                    settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                    // Tắt hẳn thanh cuộn/hiệu ứng overscroll của WebView — nếu
+                    // không, vài pixel viền cuộn có thể làm video trông lệch
+                    // so với khung bo góc của module.
+                    isVerticalScrollBarEnabled = false
+                    isHorizontalScrollBarEnabled = false
+                    overScrollMode = View.OVER_SCROLL_NEVER
+                    webViewClient = WebViewClient()
+                    webChromeClient = WebChromeClient()
+                    setBackgroundColor(Color.BLACK)
+                    contentDescription = title
+                    loadDataWithBaseURL(SITE_URL + "/", newsVideoHtml(embedUrl), "text/html", "utf-8", null)
                 }
+                container.removeAllViews()
+                container.addView(webView, FrameLayout.LayoutParams(-1, -1))
+                newsWebView = webView
             }
         }
     }
