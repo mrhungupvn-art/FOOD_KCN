@@ -1,12 +1,17 @@
 package com.com11h.app
 
+import android.app.PictureInPictureParams
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Rational
 import android.view.Gravity
 import android.view.View
 import android.view.animation.AnimationUtils
@@ -84,6 +89,20 @@ class HomeActivity : SessionActivity() {
     // cập nhật theo, không cần sửa code/cập nhật APK.
     private var newsWebView: WebView? = null
     private var newsSectionRef: LinearLayout? = null
+    // Khung chứa video (bên trong newsSectionRef) — cần tham chiếu riêng để khi
+    // vào chế độ Picture-in-Picture có thể phóng nó full khung PiP, và tiêu đề
+    // "📰 Tin Tức" (item đầu của newsSectionRef) để ẩn/hiện riêng khỏi video.
+    private var newsContainerRef: FrameLayout? = null
+    // true khi Admin đang bật 1 video hợp lệ VÀ đã tải/hiển thị thành công —
+    // chỉ cho phép vào Picture-in-Picture khi có video thật đang phát, tránh
+    // thu nhỏ Trang chủ thành 1 khung PiP trống lúc chưa có video nào.
+    private var newsVideoReady = false
+    // Giữ tham chiếu outer/content của showHome() để có thể ẩn toàn bộ phần còn
+    // lại (header, banner, Menu Vip, Món ăn phổ biến, thanh điều hướng...) khi
+    // vào Picture-in-Picture — chỉ để lại đúng khung video, và khôi phục lại
+    // như cũ khi khách phóng to trở lại.
+    private var homeShellRef: LinearLayout? = null
+    private var homeContentRef: LinearLayout? = null
 
     companion object { private const val SITE_URL = "https://com11h.com" }
 
@@ -102,10 +121,69 @@ class HomeActivity : SessionActivity() {
         try { newsWebView?.onResume() } catch (_: Exception) { }
     }
     // Dừng dải "Menu Vip" tự trôi + tạm dừng video Tin Tức khi rời màn hình (đỡ tốn pin/CPU khi không hiển thị).
-    override fun onPause() { vipAutoScrollRunnable?.let { handler.removeCallbacks(it) }; try { newsWebView?.onPause() } catch (_: Exception) { }; super.onPause() }
+    // Không tạm dừng video nếu đang ở chế độ Picture-in-Picture (xem
+    // onUserLeaveHint/onPictureInPictureModeChanged bên dưới): lúc đó Trang chủ
+    // vẫn đang hiển thị (dưới dạng khung nổi nhỏ), khách vẫn cần nghe/xem tiếp.
+    override fun onPause() {
+        vipAutoScrollRunnable?.let { handler.removeCallbacks(it) }
+        if (!isInPipModeCompat()) { try { newsWebView?.onPause() } catch (_: Exception) { } }
+        super.onPause()
+    }
     // Phiên bị hết hạn NGAY trên Trang chủ (khách đứng yên quá lâu) -> icon 👤
     // đang hiện chấm xanh "đã đăng nhập" cần được cập nhật lại ngay lập tức.
     override fun onSessionExpired() { refreshProfileIcon() }
+
+    private fun isInPipModeCompat(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode
+
+    /**
+     * Khách vừa rời Trang chủ bằng thao tác của chính họ (bấm "Thực đơn"/"Giỏ
+     * hàng"/nút Home hệ thống...) trong khi video Tin Tức đang phát -> tự động
+     * thu Trang chủ thành khung Picture-in-Picture nổi nhỏ, video tiếp tục
+     * phát trong lúc khách lướt màn hình khác (ví dụ chọn món ở Thực đơn).
+     * onUserLeaveHint() luôn được gọi TRƯỚC onPause() mỗi khi rời màn hình do
+     * thao tác của khách (không gọi khi hệ thống tự ngắt, ví dụ có cuộc gọi
+     * đến) — đúng thời điểm cần để vào PiP trước khi video bị tạm dừng.
+     */
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (!newsVideoReady) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) return
+        if (isInPictureInPictureMode) return
+        try {
+            enterPictureInPictureMode(
+                PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).build()
+            )
+        } catch (_: Exception) { /* Máy/ROM không hỗ trợ dù có khai báo feature -> bỏ qua, video sẽ tạm dừng như trước. */ }
+    }
+
+    /**
+     * Ẩn toàn bộ phần còn lại của Trang chủ (header, ô tìm kiếm, banner, Menu
+     * Vip, Món ăn phổ biến, thanh điều hướng dưới) khi vào Picture-in-Picture
+     * để khung PiP nhỏ chỉ hiện đúng video — không hiện các phần tử tí hon
+     * không đọc được. Khôi phục lại nguyên trạng khi khách phóng to trở lại
+     * (bấm vào khung PiP hoặc quay lại app).
+     */
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        val shell = homeShellRef ?: return
+        val content = homeContentRef ?: return
+        val newsTitle = newsSectionRef?.let { if (it.childCount > 1) it.getChildAt(0) else null }
+        if (isInPictureInPictureMode) {
+            for (i in 0 until shell.childCount) shell.getChildAt(i).visibility = if (i == 1) View.VISIBLE else View.GONE
+            for (i in 0 until content.childCount) {
+                content.getChildAt(i).visibility = if (content.getChildAt(i) === newsSectionRef) View.VISIBLE else View.GONE
+            }
+            newsTitle?.visibility = View.GONE
+        } else {
+            for (i in 0 until shell.childCount) shell.getChildAt(i).visibility = View.VISIBLE
+            for (i in 0 until content.childCount) content.getChildAt(i).visibility = View.VISIBLE
+            newsTitle?.visibility = View.VISIBLE
+            // Khách rời PiP mà Tin Tức đã bị Admin tắt/ẩn trong lúc đó thì vẫn giữ đúng trạng thái ẩn.
+            if (!newsVideoReady) newsSectionRef?.visibility = View.GONE
+        }
+    }
 
     /** Cập nhật số lượng (badge đỏ) trên icon 🛒 Giỏ hàng ở thanh điều hướng, đọc từ giỏ hàng cục bộ đã lưu. */
     private fun refreshCartBadge() {
@@ -438,8 +516,11 @@ class HomeActivity : SessionActivity() {
     private fun showHome() {
         val shell = shell()
         setContentView(shell)
+        homeShellRef = shell
         val scroll = shell.getChildAt(1) as ScrollView
         val content = scroll.getChildAt(0) as LinearLayout
+        homeContentRef = content
+        newsVideoReady = false
         content.addView(searchBox(), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
 
         val bannerContainer = FrameLayout(this)
@@ -480,6 +561,7 @@ class HomeActivity : SessionActivity() {
         newsSection.addView(newsContainer, LinearLayout.LayoutParams(-1, -2))
         content.addView(newsSection, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(16) })
         this.newsSectionRef = newsSection
+        this.newsContainerRef = newsContainer
         loadNewsVideo(newsSection, newsContainer)
 
         content.addView(label("Món ăn phổ biến", 21f, text, true).apply { setPadding(0, 0, 0, dp(8)) })
@@ -547,6 +629,7 @@ class HomeActivity : SessionActivity() {
                     val embedUrl = video?.optString("embed_url")?.trim().orEmpty()
                     if (r == null || !r.optBoolean("ok") || embedUrl.isBlank()) {
                         section.visibility = View.GONE
+                        newsVideoReady = false
                         return@runOnUiThread
                     }
                     val title = video?.optString("title").orEmpty()
@@ -579,11 +662,13 @@ class HomeActivity : SessionActivity() {
                     container.addView(webView, FrameLayout.LayoutParams(-1, -1))
                     newsWebView = webView
                     section.visibility = View.VISIBLE
+                    newsVideoReady = true
                 } catch (e: Exception) {
                     // WebView không dựng được (hoặc lỗi bất kỳ khác) trên máy này
                     // -> chỉ ẩn khối Tin Tức, các module khác (Banner, Menu Vip,
                     // Món ăn phổ biến...) vẫn hiển thị bình thường.
                     section.visibility = View.GONE
+                    newsVideoReady = false
                 }
             }
         }
