@@ -29,6 +29,9 @@ class ShopLiveApi(context: Context) {
     fun liveRooms(): JSONObject = account.request("live_rooms")
     fun liveRoom(id: Long): JSONObject = account.request("live_room", query = mapOf("id" to id.toString()))
 
+    /** Resolves the existing COM11H partner/seller identity from the same Bearer token. */
+    fun sellerContext(): JSONObject = account.request("seller_context")
+
     fun sendLiveMessage(roomId: Long, message: String): JSONObject = account.request(
         "live_message", method = "POST",
         body = JSONObject().put("room_id", roomId).put("message", message).toString()
