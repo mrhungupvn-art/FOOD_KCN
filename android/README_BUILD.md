@@ -5,16 +5,19 @@
   khẩu, app gọi `register_request_otp` để gửi mã 6 số về SĐT, hiện màn hình
   nhập mã (có nút "Gửi lại mã"), rồi mới gọi `register` (kèm `otp`) để thật
   sự tạo tài khoản.
-- **Quên mật khẩu (MỚI):** màn Đăng nhập có thêm nút "Quên mật khẩu?" — nhập
-  SĐT, nhận mã OTP, nhập mã + mật khẩu mới để đặt lại (`password_reset_request_otp`
-  rồi `password_reset`). Đặt lại thành công sẽ đăng nhập luôn trên thiết bị
-  hiện tại và tự đăng xuất các thiết bị khác đang đăng nhập tài khoản đó.
-- **Bắt buộc:** phải upload `api/index.php` mới (đã thêm các action
-  `register_request_otp`, `password_reset_request_otp`, `password_reset`, và
-  action `register` giờ nhận thêm trường `otp`) cùng `core.php`, `config.php`
-  lên server TRƯỚC KHI phát hành app 1.7.0, nếu không app sẽ nhận lỗi "hành
-  động không xác định" khi gọi các action mới này (xem `HUONG_DAN_OTP.md`
-  phía backend).
+- **Quên mật khẩu (ĐÃ ĐỔI — không còn OTP):** màn Đăng nhập có nút "Quên mật
+  khẩu?" — khách chỉ nhập Họ tên + SĐT rồi gửi (action `password_reset_request`).
+  KHÔNG tự đặt mật khẩu trên app nữa: hệ thống báo admin qua Telegram, admin
+  vào trang quản trị cấp mật khẩu mới rồi tự nhắn SMS cho khách từ số
+  0922 60 62 68. 2 action cũ `password_reset_request_otp` và `password_reset`
+  ĐÃ BỊ GỠ khỏi backend — bản app nào còn gọi 2 action này sẽ nhận lỗi "hành
+  động không xác định", nên PHẢI build lại app với `MainActivity.kt` mới.
+- **Bắt buộc:** phải upload `api/index.php` mới (đã thêm action
+  `register_request_otp`, action `register` giờ nhận thêm trường `otp`, và
+  action `password_reset_request` thay cho 2 action quên-mật-khẩu cũ) cùng
+  `core.php`, `config.php` lên server TRƯỚC KHI phát hành app mới, nếu không
+  app sẽ nhận lỗi "hành động không xác định" khi gọi các action này (xem
+  `HUONG_DAN_OTP.md` phía backend).
 - Sau khi bản 1.7.0 được phát hành và đa số khách đã cập nhật, đổi hằng số
   `OTP_REQUIRED_FOR_APP_REGISTER` sang `true` trong `config.php` phía server
   để bắt buộc OTP cho mọi lượt đăng ký từ app (bản app cũ hơn 1.7.0 sẽ không

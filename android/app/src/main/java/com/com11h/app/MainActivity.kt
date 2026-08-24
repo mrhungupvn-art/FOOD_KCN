@@ -764,22 +764,28 @@ class MainActivity : SessionActivity() {
     }
 
     // =========================================================================
-    // QUÊN MẬT KHẨU — 2 bước: nhập SĐT -> gửi OTP -> nhập mã + mật khẩu mới.
-    // Dùng chung action 'password_reset_request_otp' / 'password_reset'.
+    // QUÊN MẬT KHẨU — 1 bước: nhập Tên + SĐT -> gửi yêu cầu. KHÔNG còn OTP:
+    // admin nhận thông báo (Telegram) và TỰ cấp mật khẩu mới, gửi SMS cho
+    // khách từ số 0922 60 62 68 — xem admin/password_reset_requests.php và
+    // create_password_reset_request() phía backend. Dùng action
+    // 'password_reset_request' (KHÔNG còn 'password_reset_request_otp' /
+    // 'password_reset' — 2 action cũ đã bị gỡ khỏi backend).
     // =========================================================================
     private fun showForgotPasswordPhone() {
         val s = shell("Quên mật khẩu", 4); setContentView(s); val c = contentOf(s)
-        c.addView(label("Nhập số điện thoại đã đăng ký, mình sẽ gửi mã xác thực để bạn đặt lại mật khẩu.", 14f, secondary))
+        c.addView(label("Nhập họ tên và số điện thoại đã đăng ký, quản trị viên sẽ liên hệ và gửi mật khẩu mới qua SMS cho bạn.", 14f, secondary))
+        val name = input("Họ tên"); c.addView(name)
         val phone = input("Số điện thoại"); c.addView(phone)
-        c.addView(button("Gửi mã xác thực") {
-            val p = phone.text.toString().trim()
+        c.addView(button("Gửi yêu cầu khôi phục") {
+            val n = name.text.toString().trim(); val p = phone.text.toString().trim()
+            if (n.isBlank()) { toast("Vui lòng nhập họ tên"); return@button }
             if (p.isBlank()) { toast("Vui lòng nhập số điện thoại"); return@button }
             executor.execute {
                 try {
-                    val r = account.request("password_reset_request_otp", "POST", JSONObject(mapOf("phone" to p)).toString())
+                    val r = account.request("password_reset_request", "POST", JSONObject(mapOf("name" to n, "phone" to p)).toString())
                     runOnUiThread {
-                        if (r.optBoolean("ok")) { toast(r.optString("message", "Đã gửi mã xác thực")); showForgotPasswordReset(p) }
-                        else toast(r.optString("message", "Không gửi được mã xác thực"))
+                        if (r.optBoolean("ok")) { showForgotPasswordSent(r.optString("message", "Đã gửi yêu cầu khôi phục.")) }
+                        else toast(r.optString("message", "Không gửi được yêu cầu"))
                     }
                 } catch (_: Exception) { runOnUiThread { toast("Không kết nối được máy chủ tài khoản") } }
             }
@@ -787,33 +793,11 @@ class MainActivity : SessionActivity() {
         c.addView(button("Quay lại đăng nhập") { showLogin() }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) } })
     }
 
-    /** Bước 2 của quên mật khẩu: nhập mã OTP + mật khẩu mới. */
-    private fun showForgotPasswordReset(phone: String) {
-        val s = shell("Đặt lại mật khẩu", 4); setContentView(s); val c = contentOf(s)
-        c.addView(label("Mình vừa gửi mã xác thực 6 số tới số điện thoại $phone.", 14f, secondary))
-        val otp = input("Mã xác thực (OTP)"); otp.inputType = android.text.InputType.TYPE_CLASS_NUMBER; c.addView(otp)
-        val pass = input("Mật khẩu mới", true); val pass2 = input("Nhập lại mật khẩu mới", true); c.addView(pass); c.addView(pass2)
-        c.addView(button("Đặt lại mật khẩu") {
-            val code = otp.text.toString().trim(); val pw = pass.text.toString(); val pw2 = pass2.text.toString()
-            if (code.isBlank() || pw.length < 6 || pw != pw2) { toast("Kiểm tra lại mã xác thực và mật khẩu mới"); return@button }
-            executor.execute {
-                try {
-                    val body = JSONObject(mapOf("phone" to phone, "otp" to code, "password" to pw, "password2" to pw2, "device" to "COM11H Android")).toString()
-                    val r = account.request("password_reset", "POST", body)
-                    runOnUiThread {
-                        if (r.optBoolean("ok")) { account.saveToken(r.optJSONObject("data")?.optString("token", "") ?: ""); toast("Đặt lại mật khẩu thành công"); showProfile() }
-                        else toast(r.optString("message", "Đặt lại mật khẩu thất bại"))
-                    }
-                } catch (_: Exception) { runOnUiThread { toast("Không kết nối được máy chủ tài khoản") } }
-            }
-        }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) } })
-        c.addView(ghostButton("Gửi lại mã") {
-            executor.execute {
-                try {
-                    val r = account.request("password_reset_request_otp", "POST", JSONObject(mapOf("phone" to phone)).toString())
-                    runOnUiThread { toast(r.optString("message", if (r.optBoolean("ok")) "Đã gửi lại mã" else "Không gửi được mã")) }
-                } catch (_: Exception) { runOnUiThread { toast("Không kết nối được máy chủ tài khoản") } }
-            }
-        }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) } })
+    /** Màn hình xác nhận sau khi gửi yêu cầu quên mật khẩu thành công. */
+    private fun showForgotPasswordSent(message: String) {
+        val s = shell("Quên mật khẩu", 4); setContentView(s); val c = contentOf(s)
+        c.addView(label(message, 14f, secondary))
+        c.addView(label("Mật khẩu mới sẽ được gửi qua SMS từ số 0922 60 62 68 (COM11H). Vui lòng chú ý điện thoại.", 13.5f, secondary).apply { setPadding(0, dp(6), 0, 0) })
+        c.addView(button("Quay lại đăng nhập") { showLogin() }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) } })
     }
 }
