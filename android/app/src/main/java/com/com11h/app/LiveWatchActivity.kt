@@ -139,7 +139,15 @@ class LiveWatchActivity : SessionActivity() {
                 val data = r?.optJSONObject("data")
                 val live = data?.optJSONObject("live")
                 if (r == null || !r.optBoolean("ok") || live == null) {
-                    Toast.makeText(this, "Không tải được phiên live.", Toast.LENGTH_SHORT).show(); return@runOnUiThread
+                    Toast.makeText(this, "Phiên live đã kết thúc hoặc không còn tồn tại.", Toast.LENGTH_SHORT).show()
+                    finish()
+                    return@runOnUiThread
+                }
+                val status = live.optString("status", "live")
+                if (status.isNotBlank() && !status.equals("live", true)) {
+                    Toast.makeText(this, "Shop đã kết thúc phiên live.", Toast.LENGTH_SHORT).show()
+                    finish()
+                    return@runOnUiThread
                 }
                 val platform = live.optString("platform", "other")
                 val videoUrl = live.optString("video_url")
@@ -168,13 +176,13 @@ class LiveWatchActivity : SessionActivity() {
                 }
                 for (i in 0 until products.length()) {
                     val p = products.getJSONObject(i)
-                    productsBoxRef.addView(productRow(p), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
+                    productsBoxRef.addView(productRow(p, products), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
                 }
             }
         }
     }
 
-    private fun productRow(p: JSONObject): LinearLayout {
+    private fun productRow(p: JSONObject, allProducts: JSONArray = JSONArray()): LinearLayout {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
             background = GradientDrawable().apply { setColor(Color.rgb(250, 250, 250)); cornerRadius = dp(12).toFloat() }
@@ -183,7 +191,28 @@ class LiveWatchActivity : SessionActivity() {
         val img = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; background = GradientDrawable().apply { setColor(Color.rgb(230, 230, 230)); cornerRadius = dp(8).toFloat() } }
         row.addView(img, LinearLayout.LayoutParams(dp(56), dp(56)).apply { rightMargin = dp(10) })
         val image = p.optString("image")
-        if (image.isNotBlank()) ImageLoader.load(img, image)
+        if (image.isNotBlank()) {
+            ImageLoader.load(img, image)
+            img.setOnClickListener {
+                val images = ArrayList<String>()
+                val titles = ArrayList<String>()
+                for (i in 0 until allProducts.length()) {
+                    val item = allProducts.optJSONObject(i) ?: continue
+                    val u = item.optString("image")
+                    if (u.isNotBlank() && !images.contains(u)) {
+                        images.add(u)
+                        titles.add(item.optString("name"))
+                    }
+                }
+                if (images.isNotEmpty()) {
+                    val current = images.indexOf(image).coerceAtLeast(0)
+                    startActivity(Intent(this, ImageGalleryActivity::class.java)
+                        .putStringArrayListExtra("images", images)
+                        .putStringArrayListExtra("titles", titles)
+                        .putExtra("index", current))
+                }
+            }
+        }
 
         val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         info.addView(TextView(this).apply { text = p.optString("name"); setTypeface(null, Typeface.BOLD); textSize = 14f })

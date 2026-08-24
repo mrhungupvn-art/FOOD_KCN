@@ -84,20 +84,29 @@ class HomeActivity : SessionActivity() {
     // cập nhật theo, không cần sửa code/cập nhật APK.
     private var newsWebView: WebView? = null
     private var newsSectionRef: LinearLayout? = null
+    // Banner LIVE chỉ hiện khi server thực sự còn phiên đang live.
+    private var liveBannerRef: TextView? = null
 
     companion object { private const val SITE_URL = "https://com11h.com" }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun bg(color: Int, radius: Int = 18) = GradientDrawable().apply { setColor(color); cornerRadius = dp(radius).toFloat() }
 
-    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); account = AccountSync(this); showSplash() }
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        account = AccountSync(this)
+        // Chỉ hiển thị màn chào ở lần mở app đầu tiên. Khi khách từ Giỏ hàng,
+        // Thực đơn... quay về Trang chủ thì không chạy lại splash 3 giây.
+        if (savedInstanceState == null && !intent.getBooleanExtra("skip_splash", false)) showSplash()
+        else showHome()
+    }
     override fun onDestroy() { handler.removeCallbacksAndMessages(null); executor.shutdownNow(); try { newsWebView?.destroy() } catch (_: Exception) { }; super.onDestroy() }
     // Khách có thể đã thêm/bớt món ở màn Thực đơn hoặc Giỏ hàng, hoặc vừa đăng
     // nhập/đăng xuất, rồi bấm Back quay lại đây (không tạo lại Activity) — cập
     // nhật badge giỏ hàng, icon tài khoản và xáo lại "Món ăn phổ biến" để mỗi
     // lần quay về trang chủ khách luôn thấy các món khác nhau.
     override fun onResume() {
-        super.onResume(); refreshCartBadge(); refreshProfileIcon(); loadPopularFoods()
+        super.onResume(); refreshCartBadge(); refreshProfileIcon(); loadPopularFoods(); loadLiveStatus()
         vipAutoScrollRunnable?.let { handler.post(it) }
         try { newsWebView?.onResume() } catch (_: Exception) { }
     }
@@ -142,7 +151,7 @@ class HomeActivity : SessionActivity() {
         val outer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bgColor) }
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), dp(9), dp(14), dp(8)); setBackgroundColor(Color.WHITE) }
         header.addView(ImageView(this).apply { setImageResource(R.drawable.com11h_logo); scaleType = ImageView.ScaleType.FIT_CENTER }, LinearLayout.LayoutParams(dp(48), dp(48)))
-        header.addView(label("Cơm 11h", 20f, primary, true), LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(8) })
+        header.addView(label("Cơm 11h xin chào !", 20f, primary, true), LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(8) })
         val profileCell = FrameLayout(this)
         profileIcon = TextView(this).apply { text = "👤"; textSize = 20f; gravity = Gravity.CENTER; setTextColor(primary); setOnClickListener { open("profile") } }
         profileCell.addView(profileIcon, FrameLayout.LayoutParams(dp(44), dp(44)))
@@ -241,9 +250,21 @@ class HomeActivity : SessionActivity() {
      * app, dùng lại đúng màn hình zoom của banner (BannerViewActivity) —
      * khách chụm/mở 2 ngón tay để phóng to, thu nhỏ, kéo xem chi tiết ảnh.
      */
-    private fun openFoodImage(imageUrl: String, title: String) {
+    private fun openFoodImage(imageUrl: String, title: String, galleryImages: List<String> = listOf(imageUrl), galleryTitles: List<String> = listOf(title)) {
         if (imageUrl.isBlank()) return
-        startActivity(Intent(this, BannerViewActivity::class.java).putExtra("image", imageUrl).putExtra("title", title))
+        val images = ArrayList<String>()
+        val titles = ArrayList<String>()
+        galleryImages.forEachIndexed { i, url ->
+            if (url.isNotBlank() && !images.contains(url)) {
+                images.add(url)
+                titles.add(galleryTitles.getOrNull(i).orEmpty())
+            }
+        }
+        val current = images.indexOf(imageUrl).coerceAtLeast(0)
+        startActivity(Intent(this, ImageGalleryActivity::class.java)
+            .putStringArrayListExtra("images", images)
+            .putStringArrayListExtra("titles", titles)
+            .putExtra("index", current))
     }
 
     /** Tải banner trang chủ từ api?action=banners (đồng bộ Admin > Banner trang chủ) và hiển thị dạng slider tự chạy. */
@@ -322,7 +343,7 @@ class HomeActivity : SessionActivity() {
                     // (chụm/mở 2 ngón tay để zoom), giống hệt cách xem banner.
                     val img = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; background = bg(Color.rgb(255, 245, 240), 14); clipToOutline = true }
                     card.addView(img, LinearLayout.LayoutParams(dp(68), dp(68))); ImageLoader.load(img, imageUrl)
-                    img.setOnClickListener { openFoodImage(imageUrl, name) }
+                    img.setOnClickListener { openFoodImage(imageUrl, name, list.map { it.optString("image") }, list.map { it.optString("name") }) }
                     val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(10), 0, 0, 0) }
                     info.addView(label(name, 17f, text, true)); info.addView(label(String.format("%,d", f.optInt("price")).replace(',', '.') + "đ", 16f, primary, true)); info.addView(label("còn ${f.optInt("stock")} phần", 13f, secondary)); card.addView(info, LinearLayout.LayoutParams(0, -2, 1f))
                     info.setOnClickListener { open("menu") }
@@ -356,7 +377,7 @@ class HomeActivity : SessionActivity() {
                 }
                 list.shuffle()
                 // Thêm đúng 2 lần cùng danh sách để cuộn lặp liền mạch.
-                repeat(2) { list.forEach { f -> row.addView(vipCard(f)) } }
+                repeat(2) { list.forEachIndexed { idx, f -> row.addView(vipCard(f, list, idx)) } }
                 row.post {
                     vipSingleSetWidth = row.width / 2
                     startVipAutoScroll()
@@ -366,7 +387,7 @@ class HomeActivity : SessionActivity() {
     }
 
     /** Một thẻ ảnh món trong dải "Menu Vip": ảnh + tên + giá, bấm vào để xem ảnh to và tự thêm vào giỏ. */
-    private fun vipCard(f: JSONObject): View {
+    private fun vipCard(f: JSONObject, galleryFoods: List<JSONObject> = listOf(f), galleryIndex: Int = 0): View {
         val id = f.optInt("id"); val name = f.optString("name"); val imageUrl = f.optString("image")
         val price = f.optInt("price"); val stock = f.optInt("stock")
         val card = LinearLayout(this).apply {
@@ -380,14 +401,14 @@ class HomeActivity : SessionActivity() {
             maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; setPadding(0, dp(5), 0, 0)
         })
         card.addView(label(String.format("%,d", price).replace(',', '.') + "đ", 12.5f, primary, true))
-        card.setOnClickListener { onVipFoodTap(id, name, imageUrl, stock) }
+        card.setOnClickListener { onVipFoodTap(id, name, imageUrl, stock, galleryFoods, galleryIndex) }
         return card
     }
 
     /** Bấm vào 1 món trong "Menu Vip": tự thêm 1 phần vào giỏ hàng, rồi mở ảnh phóng to ngay sau đó. */
-    private fun onVipFoodTap(id: Int, name: String, imageUrl: String, stock: Int) {
+    private fun onVipFoodTap(id: Int, name: String, imageUrl: String, stock: Int, galleryFoods: List<JSONObject> = listOf(), galleryIndex: Int = 0) {
         addVipToCart(id, name, stock)
-        openFoodImage(imageUrl, name)
+        openFoodImage(imageUrl, name, galleryFoods.map { it.optString("image") }, galleryFoods.map { it.optString("name") })
     }
 
     /** Thêm 1 phần món vào giỏ hàng cục bộ (cùng định dạng/nơi lưu với MainActivity), rồi cập nhật badge 🛒. */
@@ -435,22 +456,43 @@ class HomeActivity : SessionActivity() {
         handler.post(runnable)
     }
 
+    /** Chỉ hiện banner LIVE khi API xác nhận còn ít nhất một phiên đang phát. */
+    private fun loadLiveStatus() {
+        val banner = liveBannerRef ?: return
+        executor.execute {
+            val r = try { account.request("live_list") } catch (_: Exception) { null }
+            val items = r?.optJSONArray("data")
+            var hasLive = r?.optBoolean("ok") == true && items != null
+            if (hasLive) {
+                hasLive = (0 until (items?.length() ?: 0)).any { i ->
+                    val o = items?.optJSONObject(i)
+                    o != null && (o.optString("status", "live").equals("live", true))
+                }
+            }
+            runOnUiThread { banner.visibility = if (hasLive) View.VISIBLE else View.GONE }
+        }
+    }
+
     private fun showHome() {
         val shell = shell()
         setContentView(shell)
         val scroll = shell.getChildAt(1) as ScrollView
         val content = scroll.getChildAt(0) as LinearLayout
         content.addView(searchBox(), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
-content.addView(TextView(this).apply {
-        text = "🔴  Đang có Shop livestream — Xem ngay"
-        textSize = 14f
-        setTypeface(null, Typeface.BOLD)
-        setTextColor(Color.WHITE)
-        gravity = Gravity.CENTER
-        background = bg(Color.rgb(200, 40, 40), 14)
-        setPadding(dp(14), dp(12), dp(14), dp(12))
-        setOnClickListener { startActivity(Intent(this@HomeActivity, LiveListActivity::class.java)) }
-    }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(14) })
+        val liveBanner = TextView(this).apply {
+            text = "🔴  Đang có Shop livestream — Xem ngay"
+            textSize = 14f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            background = bg(Color.rgb(200, 40, 40), 14)
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            visibility = View.GONE
+            setOnClickListener { startActivity(Intent(this@HomeActivity, LiveListActivity::class.java)) }
+        }
+        liveBannerRef = liveBanner
+        content.addView(liveBanner, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(14) })
+        loadLiveStatus()
         val bannerContainer = FrameLayout(this)
         bannerContainer.addView(staticBanner(), FrameLayout.LayoutParams(-1, dp(120)))
         content.addView(bannerContainer, LinearLayout.LayoutParams(-1, dp(120)).apply { bottomMargin = dp(15) })

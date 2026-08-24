@@ -65,6 +65,7 @@ abstract class SessionActivity : Activity() {
         if (this !is HomeActivity) {
             startActivity(
                 Intent(this, HomeActivity::class.java)
+                    .putExtra("skip_splash", true)
                     .addFlags(
                         Intent.FLAG_ACTIVITY_NEW_TASK or
                             Intent.FLAG_ACTIVITY_CLEAR_TASK

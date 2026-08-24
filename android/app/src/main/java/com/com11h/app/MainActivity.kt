@@ -58,9 +58,21 @@ class MainActivity : SessionActivity() {
      * lại đúng màn hình zoom của banner (BannerViewActivity) — khách chụm/mở
      * 2 ngón tay để phóng to, thu nhỏ, kéo xem chi tiết ảnh.
      */
-    private fun openFoodImage(imageUrl: String, title: String) {
+    private fun openFoodImage(imageUrl: String, title: String, galleryImages: List<String> = listOf(imageUrl), galleryTitles: List<String> = listOf(title)) {
         if (imageUrl.isBlank()) return
-        startActivity(Intent(this, BannerViewActivity::class.java).putExtra("image", imageUrl).putExtra("title", title))
+        val images = ArrayList<String>()
+        val titles = ArrayList<String>()
+        galleryImages.forEachIndexed { i, url ->
+            if (url.isNotBlank() && !images.contains(url)) {
+                images.add(url)
+                titles.add(galleryTitles.getOrNull(i).orEmpty())
+            }
+        }
+        val current = images.indexOf(imageUrl).coerceAtLeast(0)
+        startActivity(Intent(this, ImageGalleryActivity::class.java)
+            .putStringArrayListExtra("images", images)
+            .putStringArrayListExtra("titles", titles)
+            .putExtra("index", current))
     }
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 
@@ -94,7 +106,7 @@ class MainActivity : SessionActivity() {
             "daily" -> showDaily()
             "loyalty" -> showLoyalty()
             "profile" -> showProfile()
-            else -> { startActivity(Intent(this, HomeActivity::class.java)); finish() }
+            else -> { startActivity(Intent(this, HomeActivity::class.java).putExtra("skip_splash", true)); finish() }
         }
     }
     override fun onDestroy() { stopPolling(); saveLocalCart(); executor.shutdownNow(); super.onDestroy() }
@@ -119,14 +131,14 @@ class MainActivity : SessionActivity() {
     private fun shell(title: String, selected: Int): LinearLayout {
         val outer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bgColor) }
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(8), dp(12), dp(8)); setBackgroundColor(Color.WHITE) }
-        header.addView(TextView(this).apply { text = "‹"; textSize = 34f; setTextColor(primary); gravity = Gravity.CENTER; setOnClickListener { startActivity(Intent(this@MainActivity, HomeActivity::class.java)); finish() } }, LinearLayout.LayoutParams(dp(42), dp(48)))
+        header.addView(TextView(this).apply { text = "‹"; textSize = 34f; setTextColor(primary); gravity = Gravity.CENTER; setOnClickListener { startActivity(Intent(this@MainActivity, HomeActivity::class.java).putExtra("skip_splash", true)); finish() } }, LinearLayout.LayoutParams(dp(42), dp(48)))
         header.addView(label(title, 20f, primary, true), LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(4) })
         header.addView(profileIconCell(), LinearLayout.LayoutParams(dp(44), dp(44))); outer.addView(header)
         val scroll = ScrollView(this); val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(12), dp(14), dp(18)) }; scroll.addView(content); outer.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         val nav = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(Color.WHITE); elevation = dp(8).toFloat() }
         listOf("⌂\nTrang chủ", "▦\nThực đơn", "🛒\nGiỏ hàng", "▤\nĐơn hàng", "♙\nTài khoản").forEachIndexed { i, name ->
             val cell = FrameLayout(this)
-            cell.addView(TextView(this).apply { text = name; textSize = 10f; gravity = Gravity.CENTER; setTextColor(if (i == selected) primary else secondary); setTypeface(null, if (i == selected) Typeface.BOLD else Typeface.NORMAL); setOnClickListener { when (i) { 0 -> { startActivity(Intent(this@MainActivity, HomeActivity::class.java)); finish() }; 1 -> showMenu(); 2 -> showCart(); 3 -> showOrders(); 4 -> showProfile() } } }, FrameLayout.LayoutParams(-1, -1))
+            cell.addView(TextView(this).apply { text = name; textSize = 10f; gravity = Gravity.CENTER; setTextColor(if (i == selected) primary else secondary); setTypeface(null, if (i == selected) Typeface.BOLD else Typeface.NORMAL); setOnClickListener { when (i) { 0 -> { startActivity(Intent(this@MainActivity, HomeActivity::class.java).putExtra("skip_splash", true)); finish() }; 1 -> showMenu(); 2 -> showCart(); 3 -> showOrders(); 4 -> showProfile() } } }, FrameLayout.LayoutParams(-1, -1))
             if (i == 2) {
                 cartBadge = TextView(this).apply {
                     textSize = 9.5f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; setTypeface(null, Typeface.BOLD)
@@ -214,7 +226,7 @@ class MainActivity : SessionActivity() {
                             listBox.addView(label(if (keyword.isNotEmpty()) "Không tìm thấy món nào khớp với \"$keyword\"." else "Không có món nào trong danh mục này.", 14f, secondary))
                             return
                         }
-                        filtered.forEach { f -> listBox.addView(foodCard(f)) }
+                        filtered.forEach { f -> listBox.addView(foodCard(f, filtered)) }
                     }
                     fun renderChips() {
                         chipsRow.removeAllViews()
@@ -240,14 +252,14 @@ class MainActivity : SessionActivity() {
         }
     }
 
-    private fun foodCard(f: Food): LinearLayout {
+    private fun foodCard(f: Food, galleryFoods: List<Food> = foodsCache): LinearLayout {
         val card = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; background = bg(Color.WHITE, 16); setPadding(dp(10), dp(10), dp(10), dp(10)); layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(9) } }
         // Ảnh món ăn to hơn trước và có thể bấm vào để xem phóng to (chụm/mở
         // 2 ngón tay để zoom, kéo xem chi tiết), giống hệt cách xem banner.
         val img = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; background = bg(Color.rgb(255, 245, 240), 14); clipToOutline = true }
         card.addView(img, LinearLayout.LayoutParams(dp(86), dp(86)))
         ImageLoader.load(img, f.image)
-        img.setOnClickListener { openFoodImage(f.image, f.name) }
+        img.setOnClickListener { openFoodImage(f.image, f.name, galleryFoods.map { it.image }, galleryFoods.map { it.name }) }
         val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(11), 0, dp(6), 0) }
         info.addView(label(f.name, 17f, dark, true))
         if (f.description.isNotBlank()) info.addView(label(f.description, 13.5f, secondary))
