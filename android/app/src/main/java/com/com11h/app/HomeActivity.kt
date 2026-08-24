@@ -441,7 +441,16 @@ class HomeActivity : SessionActivity() {
         val scroll = shell.getChildAt(1) as ScrollView
         val content = scroll.getChildAt(0) as LinearLayout
         content.addView(searchBox(), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
-
+content.addView(TextView(this).apply {
+        text = "🔴  Đang có Shop livestream — Xem ngay"
+        textSize = 14f
+        setTypeface(null, Typeface.BOLD)
+        setTextColor(Color.WHITE)
+        gravity = Gravity.CENTER
+        background = bg(Color.rgb(200, 40, 40), 14)
+        setPadding(dp(14), dp(12), dp(14), dp(12))
+        setOnClickListener { startActivity(Intent(this@HomeActivity, LiveListActivity::class.java)) }
+    }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(14) })
         val bannerContainer = FrameLayout(this)
         bannerContainer.addView(staticBanner(), FrameLayout.LayoutParams(-1, dp(120)))
         content.addView(bannerContainer, LinearLayout.LayoutParams(-1, dp(120)).apply { bottomMargin = dp(15) })
