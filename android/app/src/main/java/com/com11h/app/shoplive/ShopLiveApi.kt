@@ -8,6 +8,8 @@ import org.json.JSONObject
 /** COM11H LIVE API facade. The existing COM11H token remains the only identity. */
 class ShopLiveApi(context: Context) {
     private val account = AccountSync(context.applicationContext)
+    private val seller = SellerSync(context.applicationContext)
+
     fun isLoggedIn() = account.isLoggedIn()
     fun token() = account.token()
     fun logout() = account.logout()
@@ -55,10 +57,23 @@ class ShopLiveApi(context: Context) {
         body = JSONObject().put("room_id", roomId).put("product_id", productId).put("price_vnd", priceVnd).put("quantity", quantity).put("duration_seconds", durationSeconds).toString()
     )
 
-    fun startLive(shopId: Long, title: String): JSONObject = account.request(
-        "live_start", method = "POST",
-        body = JSONObject().put("shop_id", shopId).put("title", title).toString()
-    )
+    /**
+     * Seller does not choose shop_id in the UI. The app resolves the single
+     * shop owned by the authenticated Partner and sends that canonical ID.
+     */
+    fun startLive(title: String): JSONObject {
+        val ctx = seller.context()
+        val shopId = ctx.shop?.id ?: return JSONObject()
+            .put("ok", false)
+            .put("message", "Tài khoản Seller chưa được gắn với một cửa hàng hợp lệ.")
+        if (ctx.shop.status != "active") return JSONObject()
+            .put("ok", false)
+            .put("message", "Cửa hàng hiện không thể bắt đầu LIVE.")
+        return account.request(
+            "live_start", method = "POST",
+            body = JSONObject().put("shop_id", shopId).put("title", title).toString()
+        )
+    }
 
     fun stopLive(roomId: Long): JSONObject = account.request(
         "live_stop", method = "POST",
