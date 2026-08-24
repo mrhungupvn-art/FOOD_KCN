@@ -17,7 +17,9 @@ class SellerSync(context: Context) {
         val isSeller: Boolean,
         val partnerId: Long?,
         val displayName: String?,
-        val shop: SellerShop?
+        val shop: SellerShop?,
+        /** Compatibility accessor: contains zero or one shop only. */
+        val shops: List<SellerShop>
     )
 
     data class SellerShop(
@@ -28,28 +30,37 @@ class SellerSync(context: Context) {
     )
 
     fun context(): SellerContext {
-        if (!account.isLoggedIn()) return SellerContext(false, null, null, null)
+        if (!account.isLoggedIn()) return emptyContext()
 
         val root = account.request("seller_context")
         val data = root.optJSONObject("data") ?: root
         val isSeller = data.optBoolean("is_seller", false)
-        if (!root.optBoolean("ok", false) || !isSeller) {
-            return SellerContext(false, null, null, null)
-        }
+        if (!root.optBoolean("ok", false) || !isSeller) return emptyContext()
 
-        // Production rule: one Partner owns one shop. If the API returns more
-        // than one record, the app does not silently let the Seller switch
-        // shops. Backend must resolve the canonical shop for this Partner.
+        // Production rule: one Partner owns exactly one shop. If the API returns
+        // more than one record, the app refuses to choose one silently.
         val shopsArray = data.optJSONArray("shops") ?: JSONArray()
         val shop = if (shopsArray.length() == 1) parseShop(shopsArray.optJSONObject(0)) else null
+        if (shop == null) {
+            return SellerContext(
+                isSeller = false,
+                partnerId = data.optLong("partner_id").takeIf { it > 0 },
+                displayName = data.optString("display_name").ifBlank { null },
+                shop = null,
+                shops = emptyList()
+            )
+        }
 
         return SellerContext(
-            isSeller = shop != null,
+            isSeller = true,
             partnerId = data.optLong("partner_id").takeIf { it > 0 },
             displayName = data.optString("display_name").ifBlank { null },
-            shop = shop
+            shop = shop,
+            shops = listOf(shop)
         )
     }
+
+    private fun emptyContext() = SellerContext(false, null, null, null, emptyList())
 
     private fun parseShop(shop: org.json.JSONObject?): SellerShop? {
         if (shop == null) return null
