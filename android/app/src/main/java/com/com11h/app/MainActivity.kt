@@ -712,39 +712,18 @@ class MainActivity : SessionActivity() {
     }
 
     // =========================================================================
-    // ĐĂNG KÝ — 2 bước: nhập thông tin -> gửi OTP về SĐT -> nhập mã để tạo
-    // tài khoản. Dùng chung action 'register_request_otp' / 'register' với
-    // web (xem HUONG_DAN_OTP.md phía backend) — cùng 1 luồng nghiệp vụ.
+    // ĐĂNG KÝ — 1 bước: nhập thông tin -> tạo tài khoản luôn, KHÔNG cần mã
+    // xác thực (OTP chỉ dùng cho luồng quên mật khẩu, không dùng ở đây).
+    // Dùng action 'register' (xem HUONG_DAN_OTP.md phía backend).
     // =========================================================================
     private fun showRegister() {
         val s = shell("Đăng ký tài khoản", 4); setContentView(s); val c = contentOf(s); val name = input("Họ tên"); val phone = input("Số điện thoại"); val pass = input("Mật khẩu", true); val pass2 = input("Nhập lại mật khẩu", true); c.addView(name); c.addView(phone); c.addView(pass); c.addView(pass2)
-        c.addView(button("Gửi mã xác thực") {
+        c.addView(button("Đăng ký") {
             val n = name.text.toString().trim(); val p = phone.text.toString().trim(); val pw = pass.text.toString(); val pw2 = pass2.text.toString()
             if (n.isBlank() || p.isBlank() || pw.length < 6 || pw != pw2) { toast("Kiểm tra lại thông tin đăng ký"); return@button }
             executor.execute {
                 try {
-                    val r = account.request("register_request_otp", "POST", JSONObject(mapOf("phone" to p)).toString())
-                    runOnUiThread {
-                        if (r.optBoolean("ok")) { toast(r.optString("message", "Đã gửi mã xác thực")); showRegisterOtp(n, p, pw, pw2) }
-                        else toast(r.optString("message", "Không gửi được mã xác thực"))
-                    }
-                } catch (_: Exception) { runOnUiThread { toast("Không kết nối được máy chủ tài khoản") } }
-            }
-        }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) } })
-        c.addView(button("Đăng nhập") { showLogin() }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) } })
-    }
-
-    /** Bước 2 của đăng ký: nhập mã OTP vừa gửi tới SĐT rồi tạo tài khoản. */
-    private fun showRegisterOtp(name: String, phone: String, pass: String, pass2: String) {
-        val s = shell("Nhập mã xác thực", 4); setContentView(s); val c = contentOf(s)
-        c.addView(label("Mình vừa gửi mã xác thực 6 số tới số điện thoại $phone.", 14f, secondary))
-        val otp = input("Mã xác thực (OTP)"); otp.inputType = android.text.InputType.TYPE_CLASS_NUMBER; c.addView(otp)
-        c.addView(button("Xác nhận & tạo tài khoản") {
-            val code = otp.text.toString().trim()
-            if (code.isBlank()) { toast("Vui lòng nhập mã xác thực"); return@button }
-            executor.execute {
-                try {
-                    val body = JSONObject(mapOf("name" to name, "phone" to phone, "password" to pass, "password2" to pass2, "otp" to code, "device" to "COM11H Android")).toString()
+                    val body = JSONObject(mapOf("name" to n, "phone" to p, "password" to pw, "password2" to pw2, "device" to "COM11H Android")).toString()
                     val r = account.request("register", "POST", body)
                     runOnUiThread {
                         if (r.optBoolean("ok")) { account.saveToken(r.optJSONObject("data")?.optString("token", "") ?: ""); toast("Đăng ký thành công"); showProfile() }
@@ -753,14 +732,7 @@ class MainActivity : SessionActivity() {
                 } catch (_: Exception) { runOnUiThread { toast("Không kết nối được máy chủ tài khoản") } }
             }
         }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) } })
-        c.addView(ghostButton("Gửi lại mã") {
-            executor.execute {
-                try {
-                    val r = account.request("register_request_otp", "POST", JSONObject(mapOf("phone" to phone)).toString())
-                    runOnUiThread { toast(r.optString("message", if (r.optBoolean("ok")) "Đã gửi lại mã" else "Không gửi được mã")) }
-                } catch (_: Exception) { runOnUiThread { toast("Không kết nối được máy chủ tài khoản") } }
-            }
-        }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) } })
+        c.addView(button("Đăng nhập") { showLogin() }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) } })
     }
 
     // =========================================================================
