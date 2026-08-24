@@ -1,19 +1,44 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-permission android:name="android.permission.INTERNET" />
-    <application android:theme="@style/AppTheme" android:label="Com11h.com" android:allowBackup="true" android:supportsRtl="true" android:usesCleartextTraffic="false" android:icon="@drawable/com11h_logo">
-        <activity android:name=".LiveListActivity" android:screenOrientation="portrait" android:exported="false" />
-        <activity android:name=".LiveWatchActivity" android:screenOrientation="portrait" android:exported="false" />
-        <activity android:name=".HomeActivity" android:screenOrientation="portrait" android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-        <activity android:name=".MenuActivity" android:screenOrientation="portrait" android:exported="false" />
-        <activity android:name=".WebActivity" android:screenOrientation="portrait" android:exported="false" />
-        <activity android:name=".BannerViewActivity" android:screenOrientation="portrait" android:exported="false" android:theme="@style/AppTheme" />
-        <activity android:name=".LegacyRouterActivity" android:screenOrientation="portrait" android:exported="false" />
-        <activity android:name=".MainActivity" android:screenOrientation="portrait" android:exported="false" />
-        <activity android:name=".AccountActivity" android:screenOrientation="portrait" android:exported="false" />
-    </application>
+<?xml version="1.0"?>
+
+-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+<uses-permission android:name="android.permission.INTERNET"/>
+
+
+-<application android:icon="@drawable/com11h_logo" android:usesCleartextTraffic="false" android:supportsRtl="true" android:allowBackup="true" android:label="Com11h.com" android:theme="@style/AppTheme">
+
+<activity android:name=".LiveListActivity" android:exported="false" android:screenOrientation="portrait"/>
+
+<activity android:name=".LiveWatchActivity" android:exported="false" android:screenOrientation="portrait"/>
+
+
+-<activity android:name=".HomeActivity" android:exported="true" android:screenOrientation="portrait">
+
+
+-<intent-filter>
+
+<action android:name="android.intent.action.MAIN"/>
+
+<category android:name="android.intent.category.LAUNCHER"/>
+
+</intent-filter>
+
+</activity>
+
+<activity android:name=".MenuActivity" android:exported="false" android:screenOrientation="portrait"/>
+
+<activity android:name=".WebActivity" android:exported="false" android:screenOrientation="portrait"/>
+
+<activity android:name=".ImageGalleryActivity" android:exported="false" android:screenOrientation="portrait"/>
+
+<activity android:name=".BannerViewActivity" android:theme="@style/AppTheme" android:exported="false" android:screenOrientation="portrait"/>
+
+<activity android:name=".LegacyRouterActivity" android:exported="false" android:screenOrientation="portrait"/>
+
+<activity android:name=".MainActivity" android:exported="false" android:screenOrientation="portrait"/>
+
+<activity android:name=".AccountActivity" android:exported="false" android:screenOrientation="portrait"/>
+
+</application>
+
 </manifest>
