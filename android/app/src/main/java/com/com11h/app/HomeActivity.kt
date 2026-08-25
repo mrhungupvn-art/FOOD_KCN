@@ -11,6 +11,9 @@ import android.view.Gravity
 import android.view.View
 import android.view.animation.AnimationUtils
 import android.view.inputmethod.EditorInfo
+import android.webkit.WebChromeClient
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.*
 import org.json.JSONArray
 import org.json.JSONObject
@@ -75,44 +78,20 @@ class HomeActivity : SessionActivity() {
     private var vipAutoScrollRunnable: Runnable? = null
     private var vipUserTouching = false
     private var vipSingleSetWidth = 0
-    // Danh sách Vip KHÔNG lặp đôi (chỉ 1 bản), dùng để vuốt xem ảnh lần lượt đúng thứ tự món.
-    private var vipUniqueList: List<JSONObject> = emptyList()
     // "Tin Tức" — module video YouTube thời sự lấy từ api?action=news_video,
     // cùng bề rộng với "Menu Vip", chiều cao tự tính theo tỉ lệ 16:9 của
     // video. Admin đổi video (bật/tắt) trên admin/news_videos.php thì app tự
     // cập nhật theo, không cần sửa code/cập nhật APK.
-    // WebView phát video KHÔNG còn được HomeActivity giữ trực tiếp nữa — nó
-    // do FloatingVideoManager quản lý dùng chung xuyên suốt app (xem file đó
-    // để biết cơ chế "video docking + bong bóng nổi" tự viết trong app, thay
-    // cho Picture-in-Picture của hệ điều hành).
+    private var newsWebView: WebView? = null
     private var newsSectionRef: LinearLayout? = null
-    // Khung chứa video (bên trong newsSectionRef) — nơi FloatingVideoManager
-    // "cắm" WebView vào mỗi khi video còn nằm trong tầm nhìn trên Trang chủ.
-    private var newsContainerRef: FrameLayout? = null
-    // true khi Admin đang bật 1 video hợp lệ VÀ đã tải/hiển thị thành công —
-    // chỉ cho phép docking/nổi bong bóng khi có video thật đang phát.
-    private var newsVideoReady = false
-    // ScrollView chính của Trang chủ — theo dõi để biết khung "📰 Tin Tức"
-    // còn nằm trong tầm nhìn hay đã bị cuộn khuất (quyết định video nên hiển
-    // thị inline hay "docking" thành bong bóng nhỏ), và để cuộn mượt về lại
-    // đúng vị trí khi khách bấm vào bong bóng lúc đang đứng sẵn ở Trang chủ.
-    private var homeScrollRef: ScrollView? = null
 
     companion object { private const val SITE_URL = "https://com11h.com" }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun bg(color: Int, radius: Int = 18) = GradientDrawable().apply { setColor(color); cornerRadius = dp(radius).toFloat() }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState); account = AccountSync(this)
-        // Video bị đóng hẳn (khách bấm ✕ trên bong bóng nổi, ở bất kỳ màn hình
-        // nào) -> ẩn lại khối "📰 Tin Tức" trên Trang chủ như lúc chưa có video.
-        FloatingVideoManager.onClosed = {
-            runOnUiThread { if (!isFinishing && !isDestroyed) { newsSectionRef?.visibility = View.GONE; newsVideoReady = false } }
-        }
-        showSplash()
-    }
-    override fun onDestroy() { handler.removeCallbacksAndMessages(null); executor.shutdownNow(); super.onDestroy() }
+    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); account = AccountSync(this); showSplash() }
+    override fun onDestroy() { handler.removeCallbacksAndMessages(null); executor.shutdownNow(); try { newsWebView?.destroy() } catch (_: Exception) { }; super.onDestroy() }
     // Khách có thể đã thêm/bớt món ở màn Thực đơn hoặc Giỏ hàng, hoặc vừa đăng
     // nhập/đăng xuất, rồi bấm Back quay lại đây (không tạo lại Activity) — cập
     // nhật badge giỏ hàng, icon tài khoản và xáo lại "Món ăn phổ biến" để mỗi
@@ -120,59 +99,13 @@ class HomeActivity : SessionActivity() {
     override fun onResume() {
         super.onResume(); refreshCartBadge(); refreshProfileIcon(); loadPopularFoods()
         vipAutoScrollRunnable?.let { handler.post(it) }
-        // Quay lại Trang chủ (kể cả khi video đang nổi bong bóng ở màn hình
-        // khác) -> nếu khung video đang trong tầm nhìn thì "đòi" WebView về
-        // hiển thị inline như bình thường; nếu đang cuộn khuất thì để nó tiếp
-        // tục docking dạng bong bóng ngay trên Trang chủ.
-        checkNewsDockState()
+        try { newsWebView?.onResume() } catch (_: Exception) { }
     }
-    // Dừng dải "Menu Vip" tự trôi khi rời màn hình (đỡ tốn pin/CPU khi không hiển thị).
-    // KHÔNG tạm dừng video ở đây: gỡ khung inline (detachInline) rồi để
-    // FloatingVideoManager tự lo — video sẽ "chuyển nhà" mượt sang bong bóng
-    // nổi ở màn hình kế tiếp trong app, hoặc tự tạm dừng nếu khách rời hẳn
-    // khỏi app (xem FloatingVideoManager).
-    override fun onPause() {
-        vipAutoScrollRunnable?.let { handler.removeCallbacks(it) }
-        FloatingVideoManager.detachInline()
-        super.onPause()
-    }
+    // Dừng dải "Menu Vip" tự trôi + tạm dừng video Tin Tức khi rời màn hình (đỡ tốn pin/CPU khi không hiển thị).
+    override fun onPause() { vipAutoScrollRunnable?.let { handler.removeCallbacks(it) }; try { newsWebView?.onPause() } catch (_: Exception) { }; super.onPause() }
     // Phiên bị hết hạn NGAY trên Trang chủ (khách đứng yên quá lâu) -> icon 👤
     // đang hiện chấm xanh "đã đăng nhập" cần được cập nhật lại ngay lập tức.
     override fun onSessionExpired() { refreshProfileIcon() }
-
-    /**
-     * Kiểm tra khung "📰 Tin Tức" có đang nằm trong tầm nhìn của khách trên
-     * Trang chủ hay không, để quyết định video nên hiển thị INLINE (ngay
-     * trong khung, nếu còn thấy được) hay "docking" thành BONG BÓNG NỔI nhỏ
-     * đè lên góc màn hình (nếu khách đã cuộn video ra khỏi tầm nhìn) — cả hai
-     * trường hợp đều đang đứng ngay tại Trang chủ, không phải rời màn hình.
-     */
-    private fun checkNewsDockState() {
-        if (!newsVideoReady || !FloatingVideoManager.isActive()) return
-        val container = newsContainerRef ?: return
-        val scroll = homeScrollRef ?: return
-        val loc = IntArray(2); container.getLocationOnScreen(loc)
-        val scrollLoc = IntArray(2); scroll.getLocationOnScreen(scrollLoc)
-        val visibleTop = scrollLoc[1]
-        val visibleBottom = visibleTop + scroll.height
-        val containerTop = loc[1]
-        val containerBottom = containerTop + container.height
-        val threshold = dp(24)
-        val mostlyOutOfView = containerBottom <= visibleTop + threshold || containerTop >= visibleBottom - threshold
-        if (mostlyOutOfView) FloatingVideoManager.showBubble(this) else FloatingVideoManager.attachInline(container)
-    }
-
-    /**
-     * FloatingVideoManager gọi khi khách bấm vào bong bóng nổi trong lúc đang
-     * đứng SẴN ở Trang chủ (video đã "docking" do cuộn ra khỏi màn hình) —
-     * cuộn mượt về lại đúng vị trí khung video thay vì mở lại Trang chủ (đằng
-     * nào cũng đang đứng ở đây rồi).
-     */
-    fun scrollToNewsSection() {
-        val scroll = homeScrollRef ?: return
-        val section = newsSectionRef ?: return
-        scroll.post { scroll.smoothScrollTo(0, section.top) }
-    }
 
     /** Cập nhật số lượng (badge đỏ) trên icon 🛒 Giỏ hàng ở thanh điều hướng, đọc từ giỏ hàng cục bộ đã lưu. */
     private fun refreshCartBadge() {
@@ -209,7 +142,7 @@ class HomeActivity : SessionActivity() {
         val outer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bgColor) }
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), dp(9), dp(14), dp(8)); setBackgroundColor(Color.WHITE) }
         header.addView(ImageView(this).apply { setImageResource(R.drawable.com11h_logo); scaleType = ImageView.ScaleType.FIT_CENTER }, LinearLayout.LayoutParams(dp(48), dp(48)))
-        header.addView(label("Cơm 11h xin chào ! ", 20f, primary, true), LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(8) })
+        header.addView(label("Cơm 11h", 20f, primary, true), LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(8) })
         val profileCell = FrameLayout(this)
         profileIcon = TextView(this).apply { text = "👤"; textSize = 20f; gravity = Gravity.CENTER; setTextColor(primary); setOnClickListener { open("profile") } }
         profileCell.addView(profileIcon, FrameLayout.LayoutParams(dp(44), dp(44)))
@@ -225,10 +158,6 @@ class HomeActivity : SessionActivity() {
         val scroll = ScrollView(this)
         val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(12), dp(14), dp(20)) }
         scroll.addView(content)
-        // Theo dõi khách cuộn Trang chủ để tự động docking/undocking video
-        // "📰 Tin Tức" — xem checkNewsDockState().
-        scroll.setOnScrollChangeListener { _, _, _, _, _ -> checkNewsDockState() }
-        homeScrollRef = scroll
         outer.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
         val nav = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(Color.WHITE); elevation = dp(8).toFloat() }
@@ -294,19 +223,27 @@ class HomeActivity : SessionActivity() {
     }
 
     /**
-     * Mở màn hình xem ảnh PHÓNG TO, có thể VUỐT sang ảnh khác trong CÙNG danh
-     * sách [images]/[titles] (đúng món/tiêu đề luôn đi theo đúng ảnh).
-     * [bannerIds] chỉ truyền khi đây là danh sách banner (để tự báo lượt xem
-     * mỗi khi vuốt sang banner khác, giống hệt lúc bấm vào banner đó).
+     * Bấm vào banner: xem ảnh PHÓNG TO ngay trong app (không nhảy sang link
+     * đích/website nữa) — khách chụm/mở 2 ngón tay để phóng to, thu nhỏ, kéo
+     * xem chi tiết nội dung trên ảnh. Vẫn âm thầm gọi banner_click.php ở nền
+     * (không mở màn hình nào) để Admin tiếp tục nhận đúng số lượt click banner
+     * như trước — chỉ khác là app không điều hướng khách ra khỏi màn hình nữa.
      */
-    private fun openImages(images: List<String>, titles: List<String>, startIndex: Int, bannerIds: List<Int>? = null) {
-        if (images.isEmpty()) return
-        val i = Intent(this, BannerViewActivity::class.java)
-            .putStringArrayListExtra("images", ArrayList(images))
-            .putStringArrayListExtra("titles", ArrayList(titles))
-            .putExtra("index", startIndex.coerceIn(0, images.size - 1))
-        if (bannerIds != null) i.putIntegerArrayListExtra("bannerIds", ArrayList(bannerIds))
-        startActivity(i)
+    private fun openBanner(id: Int, imageUrl: String, title: String) {
+        if (id > 0) executor.execute {
+            try { (java.net.URL("$SITE_URL/banner_click.php?id=$id").openConnection() as java.net.HttpURLConnection).apply { connectTimeout = 8000; readTimeout = 8000; requestMethod = "GET" }.inputStream.close() } catch (_: Exception) { }
+        }
+        startActivity(Intent(this, BannerViewActivity::class.java).putExtra("image", imageUrl).putExtra("title", title))
+    }
+
+    /**
+     * Bấm vào ảnh món ăn (ở "Món ăn phổ biến"): xem ảnh PHÓNG TO ngay trong
+     * app, dùng lại đúng màn hình zoom của banner (BannerViewActivity) —
+     * khách chụm/mở 2 ngón tay để phóng to, thu nhỏ, kéo xem chi tiết ảnh.
+     */
+    private fun openFoodImage(imageUrl: String, title: String) {
+        if (imageUrl.isBlank()) return
+        startActivity(Intent(this, BannerViewActivity::class.java).putExtra("image", imageUrl).putExtra("title", title))
     }
 
     /** Tải banner trang chủ từ api?action=banners (đồng bộ Admin > Banner trang chủ) và hiển thị dạng slider tự chạy. */
@@ -325,15 +262,11 @@ class HomeActivity : SessionActivity() {
                     outAnimation = AnimationUtils.loadAnimation(this@HomeActivity, android.R.anim.fade_out)
                     flipInterval = 4000
                 }
-                val bannerImages = mutableListOf<String>()
-                val bannerTitles = mutableListOf<String>()
-                val bannerIdList = mutableListOf<Int>()
                 for (i in 0 until arr.length()) {
                     val b = arr.getJSONObject(i)
                     val id = b.optInt("id")
                     val title = b.optString("title")
                     val imageUrl = b.optString("image")
-                    bannerImages.add(imageUrl); bannerTitles.add(title); bannerIdList.add(id)
                     val slide = FrameLayout(this)
                     val img = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
                     slide.addView(img, FrameLayout.LayoutParams(-1, -1))
@@ -346,8 +279,7 @@ class HomeActivity : SessionActivity() {
                     }
                     slide.clipToOutline = true
                     slide.background = bg(Color.rgb(255, 245, 240), 20)
-                    val tapIndex = i
-                    slide.setOnClickListener { openImages(bannerImages, bannerTitles, tapIndex, bannerIdList) }
+                    slide.setOnClickListener { openBanner(id, imageUrl, title) }
                     flipper.addView(slide)
                     ImageLoader.load(img, b.optString("image"))
                 }
@@ -381,20 +313,16 @@ class HomeActivity : SessionActivity() {
                 for (i in 0 until arr.length()) list.add(arr.getJSONObject(i))
                 list.shuffle()
                 val count = minOf(6, list.size)
-                val shownImages = (0 until count).map { list[it].optString("image") }
-                val shownNames = (0 until count).map { list[it].optString("name") }
                 for (i in 0 until count) {
                     val f = list[i]
                     val name = f.optString("name")
                     val imageUrl = f.optString("image")
                     val card = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(12), dp(12), dp(12)); background = bg(Color.WHITE, 16); layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) } }
                     // Ảnh món ăn to hơn trước và có thể bấm vào để xem phóng to
-                    // (chụm/mở 2 ngón tay để zoom), giống hệt cách xem banner —
-                    // vuốt trái/phải để xem sang món khác trong đúng 6 món này.
+                    // (chụm/mở 2 ngón tay để zoom), giống hệt cách xem banner.
                     val img = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; background = bg(Color.rgb(255, 245, 240), 14); clipToOutline = true }
                     card.addView(img, LinearLayout.LayoutParams(dp(68), dp(68))); ImageLoader.load(img, imageUrl)
-                    val tapIndex = i
-                    img.setOnClickListener { openImages(shownImages, shownNames, tapIndex) }
+                    img.setOnClickListener { openFoodImage(imageUrl, name) }
                     val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(10), 0, 0, 0) }
                     info.addView(label(name, 17f, text, true)); info.addView(label(String.format("%,d", f.optInt("price")).replace(',', '.') + "đ", 16f, primary, true)); info.addView(label("còn ${f.optInt("stock")} phần", 13f, secondary)); card.addView(info, LinearLayout.LayoutParams(0, -2, 1f))
                     info.setOnClickListener { open("menu") }
@@ -427,7 +355,6 @@ class HomeActivity : SessionActivity() {
                     return@runOnUiThread
                 }
                 list.shuffle()
-                vipUniqueList = list
                 // Thêm đúng 2 lần cùng danh sách để cuộn lặp liền mạch.
                 repeat(2) { list.forEach { f -> row.addView(vipCard(f)) } }
                 row.post {
@@ -457,13 +384,10 @@ class HomeActivity : SessionActivity() {
         return card
     }
 
-    /** Bấm vào 1 món trong "Menu Vip": tự thêm 1 phần vào giỏ hàng, rồi mở ảnh phóng to — vuốt được qua các món Vip khác theo đúng thứ tự. */
+    /** Bấm vào 1 món trong "Menu Vip": tự thêm 1 phần vào giỏ hàng, rồi mở ảnh phóng to ngay sau đó. */
     private fun onVipFoodTap(id: Int, name: String, imageUrl: String, stock: Int) {
         addVipToCart(id, name, stock)
-        val images = vipUniqueList.map { it.optString("image") }
-        val names = vipUniqueList.map { it.optString("name") }
-        val tapIndex = vipUniqueList.indexOfFirst { it.optInt("id") == id }.coerceAtLeast(0)
-        if (images.isNotEmpty()) openImages(images, names, tapIndex) else openImages(listOf(imageUrl), listOf(name), 0)
+        openFoodImage(imageUrl, name)
     }
 
     /** Thêm 1 phần món vào giỏ hàng cục bộ (cùng định dạng/nơi lưu với MainActivity), rồi cập nhật badge 🛒. */
@@ -516,8 +440,25 @@ class HomeActivity : SessionActivity() {
         setContentView(shell)
         val scroll = shell.getChildAt(1) as ScrollView
         val content = scroll.getChildAt(0) as LinearLayout
-        newsVideoReady = false
         content.addView(searchBox(), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
+
+        // Thanh thao tác nhanh: đưa các tính năng quan trọng lên ngay đầu trang,
+        // giảm số lần khách phải tìm trong menu Tài khoản.
+        val quick = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val quickScroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; overScrollMode = View.OVER_SCROLL_NEVER; addView(quick) }
+        listOf(
+            "🍚\nThực đơn" to { open("menu") },
+            "🛒\nGiỏ hàng" to { open("cart") },
+            "❤️\nYêu thích" to { open("favorites") },
+            "🪙\nXU" to { open("xu") },
+            "🎁\nƯu đãi" to { open("xu") }
+        ).forEach { (title, action) ->
+            quick.addView(TextView(this).apply {
+                text = title; textSize = 12f; gravity = Gravity.CENTER; setTextColor(primary);
+                background = bg(Color.WHITE, 15); setPadding(dp(13), dp(8), dp(13), dp(8)); setOnClickListener { action() }
+            }, LinearLayout.LayoutParams(dp(82), dp(54)).apply { marginEnd = dp(8) })
+        }
+        content.addView(quickScroll, LinearLayout.LayoutParams(-1, dp(56)).apply { bottomMargin = dp(10) })
 
         val bannerContainer = FrameLayout(this)
         bannerContainer.addView(staticBanner(), FrameLayout.LayoutParams(-1, dp(120)))
@@ -552,12 +493,11 @@ class HomeActivity : SessionActivity() {
         // Dùng AspectRatioFrameLayout để khung module luôn khớp đúng pixel
         // với khung trình phát video, không bị lệch dù xoay màn hình.
         val newsSection = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
-        newsSection.addView(label("Thư Giản Âm Nhạc ", 21f, text, true).apply { setPadding(0, 0, 0, dp(9)) })
+        newsSection.addView(label("📰 Tin Tức", 21f, text, true).apply { setPadding(0, 0, 0, dp(9)) })
         val newsContainer = AspectRatioFrameLayout(this, 16f, 9f).apply { background = bg(Color.BLACK, 18); clipToOutline = true }
         newsSection.addView(newsContainer, LinearLayout.LayoutParams(-1, -2))
         content.addView(newsSection, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(16) })
         this.newsSectionRef = newsSection
-        this.newsContainerRef = newsContainer
         loadNewsVideo(newsSection, newsContainer)
 
         content.addView(label("Món ăn phổ biến", 21f, text, true).apply { setPadding(0, 0, 0, dp(8)) })
@@ -573,13 +513,40 @@ class HomeActivity : SessionActivity() {
      * không cần cập nhật APK). Nếu Admin chưa bật video nào thì ẩn hẳn cả
      * khối "Tin Tức" (kể cả tiêu đề) để không để lại khoảng trống thừa.
      * Chiều cao khung video tự tính theo đúng bề rộng thực tế của khối
-     * (bằng bề rộng "Menu Vip") nhân tỉ lệ 16:9 (video ngang chuẩn YouTube).
+     * (bằng bề rộng "Menu Vip") nhân tỉ lệ 9:16 (video ngang chuẩn YouTube).
      *
-     * WebView phát video thật sự được FloatingVideoManager.start() tạo và
-     * quản lý (dùng chung xuyên suốt app, né lỗi YouTube "153" bằng
-     * loadDataWithBaseURL — xem file đó) — HomeActivity chỉ cần "xin" nó về
-     * hiển thị ngay trong container này qua attachInline()/checkNewsDockState().
+     * newsVideoHtml() bên dưới bọc embed_url trong 1 trang HTML tối giản
+     * (nền đen, iframe phủ kín) rồi nạp qua loadDataWithBaseURL với baseUrl
+     * là chính tên miền website. Đây là cách bắt buộc để né lỗi YouTube
+     * "153 — Video player configuration error": nếu gọi thẳng
+     * webView.loadUrl(embedUrl), WebView KHÔNG gửi header Referer/Origin
+     * hợp lệ nên YouTube từ chối phát video; loadDataWithBaseURL khiến
+     * WebView coi baseUrl là "trang chứa" nên iframe bên trong có Referer
+     * hợp lệ.
      */
+    private fun newsVideoHtml(embedUrl: String): String {
+        val safeUrl = embedUrl.replace("\"", "&quot;")
+        return """
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+              <style>
+                html, body { margin:0; padding:0; background:#000; overflow:hidden; }
+                iframe { position:absolute; top:0; left:0; width:100%; height:100%; border:0; }
+              </style>
+            </head>
+            <body>
+              <iframe src="$safeUrl"
+                referrerpolicy="strict-origin-when-cross-origin"
+                allow="autoplay; encrypted-media; picture-in-picture"
+                allowfullscreen></iframe>
+            </body>
+            </html>
+        """.trimIndent()
+    }
+
     private fun loadNewsVideo(section: LinearLayout, container: FrameLayout) {
         executor.execute {
             val r = try { account.request("news_video") } catch (_: Exception) { null }
@@ -587,9 +554,9 @@ class HomeActivity : SessionActivity() {
                 // Toàn bộ khối này được bọc try/catch: một số máy Android (đặc
                 // biệt máy phổ thông đã bị tắt/đóng băng app hệ thống "Android
                 // System WebView", hoặc app đó đang giữa đợt tự cập nhật) sẽ
-                // ném exception ngay khi khởi tạo WebView. Nếu không bắt lỗi ở
-                // đây, exception đó sẽ làm crash toàn bộ Activity Trang chủ
-                // (kéo theo mất luôn Banner và mọi module khác phía trên,
+                // ném exception ngay khi khởi tạo WebView(this). Nếu không bắt
+                // lỗi ở đây, exception đó sẽ làm crash toàn bộ Activity Trang
+                // chủ (kéo theo mất luôn Banner và mọi module khác phía trên,
                 // không riêng gì Tin Tức) — vì vậy TUYỆT ĐỐI không được để lỗi
                 // của module Tin Tức thoát ra ngoài phạm vi của chính nó.
                 try {
@@ -598,23 +565,43 @@ class HomeActivity : SessionActivity() {
                     val embedUrl = video?.optString("embed_url")?.trim().orEmpty()
                     if (r == null || !r.optBoolean("ok") || embedUrl.isBlank()) {
                         section.visibility = View.GONE
-                        newsVideoReady = false
                         return@runOnUiThread
                     }
                     val title = video?.optString("title").orEmpty()
                     // Không cần tự đo/gán width-height thủ công nữa: newsContainer
                     // là AspectRatioFrameLayout, tự khớp đúng khung 16:9 trong
                     // onMeasure — WebView chỉ cần MATCH_PARENT là phủ khít khung.
-                    FloatingVideoManager.start(this, embedUrl, title)
+                    try { newsWebView?.destroy() } catch (_: Exception) { }
+                    val webView = WebView(this).apply {
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.mediaPlaybackRequiresUserGesture = false
+                        settings.setSupportZoom(false)
+                        settings.builtInZoomControls = false
+                        settings.displayZoomControls = false
+                        // Referer/Origin hợp lệ để né lỗi YouTube 153, xem newsVideoHtml().
+                        settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                        // Tắt hẳn thanh cuộn/hiệu ứng overscroll của WebView — nếu
+                        // không, vài pixel viền cuộn có thể làm video trông lệch
+                        // so với khung bo góc của module.
+                        isVerticalScrollBarEnabled = false
+                        isHorizontalScrollBarEnabled = false
+                        overScrollMode = View.OVER_SCROLL_NEVER
+                        webViewClient = WebViewClient()
+                        webChromeClient = WebChromeClient()
+                        setBackgroundColor(Color.BLACK)
+                        contentDescription = title
+                        loadDataWithBaseURL(SITE_URL + "/", newsVideoHtml(embedUrl), "text/html", "utf-8", null)
+                    }
+                    container.removeAllViews()
+                    container.addView(webView, FrameLayout.LayoutParams(-1, -1))
+                    newsWebView = webView
                     section.visibility = View.VISIBLE
-                    newsVideoReady = true
-                    checkNewsDockState() // gắn WebView vào đúng chỗ (inline hay bong bóng) ngay khi vừa sẵn sàng
                 } catch (e: Exception) {
                     // WebView không dựng được (hoặc lỗi bất kỳ khác) trên máy này
                     // -> chỉ ẩn khối Tin Tức, các module khác (Banner, Menu Vip,
                     // Món ăn phổ biến...) vẫn hiển thị bình thường.
                     section.visibility = View.GONE
-                    newsVideoReady = false
                 }
             }
         }

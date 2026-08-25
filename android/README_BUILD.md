@@ -1,49 +1,16 @@
-# COM11H Android v1.8.0
+# COM11H Android v1.7.0
 
-## Ghi chú bản 1.8.0 (so với 1.7.0)
-- **Đăng ký tài khoản (ĐÃ ĐỔI — không còn OTP):** quay về 1 bước — nhập Họ
-  tên + SĐT + Mật khẩu → bấm "Đăng ký" là tạo tài khoản ngay, không còn màn
-  nhập mã xác thực. Action `register_request_otp` ĐÃ BỊ GỠ khỏi backend;
-  action `register` không cần trường `otp` nữa. Xác thực (qua admin) giờ
-  CHỈ áp dụng cho luồng quên mật khẩu, không áp dụng khi đăng ký.
-- **Quên mật khẩu (không đổi so với 1.7.0):** màn Đăng nhập có nút "Quên mật
-  khẩu?" — khách chỉ nhập Họ tên + SĐT rồi gửi (action `password_reset_request`).
-  KHÔNG tự đặt mật khẩu trên app: hệ thống báo admin qua Telegram, admin vào
-  trang quản trị cấp mật khẩu mới rồi tự nhắn SMS cho khách từ số
-  0922 60 62 68.
-- **Bắt buộc:** phải upload `api/index.php` mới (đã gỡ action
-  `register_request_otp`; action `register` không cần `otp`; action
-  `password_reset_request` cho quên mật khẩu) cùng `core.php`, `config.php`
-  lên server TRƯỚC KHI phát hành app 1.8.0, nếu không app bản cũ (1.7.0 trở
-  xuống, còn gọi `register_request_otp`) sẽ nhận lỗi "hành động không xác
-  định" khi đăng ký — nên phát hành backend và app mới CÙNG LÚC (xem
-  `HUONG_DAN_OTP.md` phía backend).
-- Hằng số `OTP_REQUIRED_FOR_APP_REGISTER` trong `config.php` giờ không còn
-  tác dụng gì (đăng ký app không còn kiểm tra OTP) — có thể bỏ qua, không
-  cần đổi giá trị.
+## Nâng cấp 1.7.0
+- Thanh thao tác nhanh trên Trang chủ: Thực đơn, Giỏ hàng, Yêu thích, Điểm, LIVE.
+- Món yêu thích lưu cục bộ trên máy, không cần thay đổi database/API server.
+- Nút ❤️ ngay trên từng món để thêm/bỏ yêu thích.
+- Màn "Món yêu thích" đồng bộ lại danh sách món từ API hiện có.
+- Nút "🔄 Mua lại đơn này" trong chi tiết đơn; app đưa các món của đơn cũ vào giỏ nếu API trả về food_id/product_id/id.
+- Tăng versionCode lên 12, versionName 1.7.0.
 
-## Ghi chú bản 1.7.0 (so với 1.6.0)
-- **Đăng ký tài khoản:** đổi sang xác thực OTP — sau khi nhập họ tên/SĐT/mật
-  khẩu, app gọi `register_request_otp` để gửi mã 6 số về SĐT, hiện màn hình
-  nhập mã (có nút "Gửi lại mã"), rồi mới gọi `register` (kèm `otp`) để thật
-  sự tạo tài khoản. **(Đã đổi lại ở bản 1.8.0 — xem ở trên.)**
-- **Quên mật khẩu (ĐÃ ĐỔI — không còn OTP):** màn Đăng nhập có nút "Quên mật
-  khẩu?" — khách chỉ nhập Họ tên + SĐT rồi gửi (action `password_reset_request`).
-  KHÔNG tự đặt mật khẩu trên app nữa: hệ thống báo admin qua Telegram, admin
-  vào trang quản trị cấp mật khẩu mới rồi tự nhắn SMS cho khách từ số
-  0922 60 62 68. 2 action cũ `password_reset_request_otp` và `password_reset`
-  ĐÃ BỊ GỠ khỏi backend — bản app nào còn gọi 2 action này sẽ nhận lỗi "hành
-  động không xác định", nên PHẢI build lại app với `MainActivity.kt` mới.
-- **Bắt buộc:** phải upload `api/index.php` mới (đã thêm action
-  `register_request_otp`, action `register` giờ nhận thêm trường `otp`, và
-  action `password_reset_request` thay cho 2 action quên-mật-khẩu cũ) cùng
-  `core.php`, `config.php` lên server TRƯỚC KHI phát hành app mới, nếu không
-  app sẽ nhận lỗi "hành động không xác định" khi gọi các action này (xem
-  `HUONG_DAN_OTP.md` phía backend).
-- Sau khi bản 1.7.0 được phát hành và đa số khách đã cập nhật, đổi hằng số
-  `OTP_REQUIRED_FOR_APP_REGISTER` sang `true` trong `config.php` phía server
-  để bắt buộc OTP cho mọi lượt đăng ký từ app (bản app cũ hơn 1.7.0 sẽ không
-  đăng ký được nữa sau khi đổi — đây là điều nên xảy ra sau khi rollout xong).
+> Lưu ý: bản này chỉ thay đổi Android. Không yêu cầu upload API mới lên host. Nếu muốn triển khai Voucher/CRM/Push Notification/Live Shopping thật sự, cần bổ sung API/backend tương ứng ở com11h.com.
+
+# COM11H Android v1.6.0
 
 ## Ghi chú bản 1.6.0 (so với 1.5.2)
 - **Trang chủ – ô tìm kiếm:** thêm nút bấm 🔍 cạnh ô "Tìm món ăn..." (trước đó

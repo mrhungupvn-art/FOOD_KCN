@@ -42,19 +42,10 @@ abstract class SessionActivity : Activity() {
 
         sessionAccount.touch()
         startSessionWatchdog()
-
-        // Video "📰 Tin Tức" nổi (nếu đang phát): nếu màn hình này KHÔNG phải
-        // Trang chủ, tự "đón" bong bóng nổi sang đè lên màn hình này — xem
-        // FloatingVideoManager để biết vì sao KHÔNG dùng Picture-in-Picture
-        // của hệ điều hành.
-        FloatingVideoManager.onActivityResumed(this)
     }
 
     override fun onPause() {
         stopSessionWatchdog()
-        // Gỡ bong bóng nổi khỏi màn hình này trước khi rời đi, để nó có thể
-        // "chuyển nhà" sang màn hình kế tiếp (hoặc tạm dừng nếu khách rời hẳn app).
-        FloatingVideoManager.onActivityPaused(this)
         super.onPause()
     }
 
