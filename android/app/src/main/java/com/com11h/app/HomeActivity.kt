@@ -519,16 +519,25 @@ class HomeActivity : SessionActivity() {
         newsVideoReady = false
         content.addView(searchBox(), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
 
-        // Lối tắt Ví XU — xem món ăn đủ 30 giây trong Thực đơn để tích XU,
-        // đổi voucher ngay trong màn Ví XU (MainActivity.showXu()).
-        content.addView(TextView(this).apply {
-            text = "🪙  Ví XU — xem món, tích XU, đổi voucher"
-            textSize = 14f; setTextColor(primary); setTypeface(null, Typeface.BOLD)
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(14), dp(11), dp(14), dp(11))
-            background = bg(Color.WHITE, 14)
-            setOnClickListener { open("xu") }
-        }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
+        // Thanh thao tác nhanh: đưa các tính năng quan trọng lên ngay đầu trang,
+        // giảm số lần khách phải tìm trong menu Tài khoản. "XU" và "Ưu đãi" cùng
+        // mở Ví XU (MainActivity.showXu()) — xem món đủ 30 giây trong Thực đơn
+        // để tích XU, đổi voucher ngay trong đó.
+        val quick = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val quickScroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; overScrollMode = View.OVER_SCROLL_NEVER; addView(quick) }
+        listOf(
+            "🍚\nThực đơn" to { open("menu") },
+            "🛒\nGiỏ hàng" to { open("cart") },
+            "❤️\nYêu thích" to { open("favorites") },
+            "🪙\nXU" to { open("xu") },
+            "🎁\nƯu đãi" to { open("xu") }
+        ).forEach { (title, action) ->
+            quick.addView(TextView(this).apply {
+                text = title; textSize = 12f; gravity = Gravity.CENTER; setTextColor(primary)
+                background = bg(Color.WHITE, 15); setPadding(dp(13), dp(8), dp(13), dp(8)); setOnClickListener { action() }
+            }, LinearLayout.LayoutParams(dp(82), dp(54)).apply { marginEnd = dp(8) })
+        }
+        content.addView(quickScroll, LinearLayout.LayoutParams(-1, dp(56)).apply { bottomMargin = dp(10) })
 
         val bannerContainer = FrameLayout(this)
         bannerContainer.addView(staticBanner(), FrameLayout.LayoutParams(-1, dp(120)))
