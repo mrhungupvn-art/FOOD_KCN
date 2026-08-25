@@ -84,6 +84,10 @@ class HomeActivity : SessionActivity() {
     // cập nhật theo, không cần sửa code/cập nhật APK.
     private var newsWebView: WebView? = null
     private var newsSectionRef: LinearLayout? = null
+    // ScrollView bao ngoài toàn bộ nội dung Trang chủ — giữ lại tham chiếu để
+    // có thể chủ động cuộn về khung "📰 Tin Tức" (vd: khi khách bấm vào bong
+    // bóng video nổi lúc đang đứng sẵn ở Trang chủ, xem scrollToNewsSection()).
+    private var homeScrollView: ScrollView? = null
 
     companion object { private const val SITE_URL = "https://com11h.com" }
 
@@ -106,6 +110,17 @@ class HomeActivity : SessionActivity() {
     // Phiên bị hết hạn NGAY trên Trang chủ (khách đứng yên quá lâu) -> icon 👤
     // đang hiện chấm xanh "đã đăng nhập" cần được cập nhật lại ngay lập tức.
     override fun onSessionExpired() { refreshProfileIcon() }
+
+    /**
+     * Cuộn Trang chủ tới khung "📰 Tin Tức". Được FloatingVideoManager gọi khi
+     * khách bấm (không kéo) vào bong bóng video nổi trong lúc đang đứng sẵn ở
+     * Trang chủ, thay vì mở lại/tạo mới HomeActivity.
+     */
+    fun scrollToNewsSection() {
+        val scroll = homeScrollView ?: return
+        val section = newsSectionRef ?: return
+        scroll.post { scroll.smoothScrollTo(0, section.top) }
+    }
 
     /** Cập nhật số lượng (badge đỏ) trên icon 🛒 Giỏ hàng ở thanh điều hướng, đọc từ giỏ hàng cục bộ đã lưu. */
     private fun refreshCartBadge() {
@@ -439,6 +454,7 @@ class HomeActivity : SessionActivity() {
         val shell = shell()
         setContentView(shell)
         val scroll = shell.getChildAt(1) as ScrollView
+        this.homeScrollView = scroll
         val content = scroll.getChildAt(0) as LinearLayout
         content.addView(searchBox(), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
 
