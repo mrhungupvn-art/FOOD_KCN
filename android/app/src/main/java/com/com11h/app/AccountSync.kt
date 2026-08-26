@@ -8,6 +8,9 @@ import java.net.URLEncoder
 
 /**
  * Lớp gọi API DUY NHẤT của app tới com11h.com/api/index.php.
+ *
+ * Food KCN: mọi request nghiệp vụ tự gửi X-KCN-ID của KCN khách đang chọn.
+ * Riêng action kcn_list là request cấp hệ thống nên không gửi KCN-ID.
  */
 class AccountSync(context: Context) {
     companion object {
@@ -15,12 +18,11 @@ class AccountSync(context: Context) {
         private const val PREFS = "com11h_secure"
         private const val TOKEN = "token"
         private const val LAST_ACTIVE = "last_active"
-
-        /** Tự động đăng xuất nếu quá 5 phút không có thao tác trên app. */
         const val IDLE_TIMEOUT_MS = 5 * 60 * 1000L
     }
 
-    private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private val appContext = context.applicationContext
+    private val prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     fun token(): String? = prefs.getString(TOKEN, null)
     fun isLoggedIn(): Boolean = !token().isNullOrBlank()
@@ -37,16 +39,12 @@ class AccountSync(context: Context) {
         .remove(LAST_ACTIVE)
         .apply()
 
-    /** Ghi lại thời điểm khách vừa thao tác trên app. */
     fun touch() {
         if (isLoggedIn()) {
-            prefs.edit()
-                .putLong(LAST_ACTIVE, System.currentTimeMillis())
-                .apply()
+            prefs.edit().putLong(LAST_ACTIVE, System.currentTimeMillis()).apply()
         }
     }
 
-    /** true nếu khách đã đăng nhập nhưng không hoạt động quá 5 phút. */
     fun isSessionExpired(): Boolean {
         val last = prefs.getLong(LAST_ACTIVE, 0L)
         if (last == 0L) return false
@@ -76,6 +74,14 @@ class AccountSync(context: Context) {
             useCaches = false
             setRequestProperty("Accept", "application/json")
             token()?.let { setRequestProperty("Authorization", "Bearer $it") }
+
+            // KCN được chọn trên thiết bị là ngữ cảnh của toàn bộ API.
+            // kcn_list là API trung tâm để lấy danh sách KCN nên không gửi header.
+            if (action != "kcn_list") {
+                val kcnId = KcnStore.id(appContext)
+                if (kcnId > 0) setRequestProperty("X-KCN-ID", kcnId.toString())
+            }
+
             headers.forEach { (k, v) -> setRequestProperty(k, v) }
         }
 
