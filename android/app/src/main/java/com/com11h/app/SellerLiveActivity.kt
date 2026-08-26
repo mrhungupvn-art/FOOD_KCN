@@ -19,7 +19,7 @@ import java.util.concurrent.Executors
 class SellerLiveActivity : SessionActivity() {
     private val executor = Executors.newSingleThreadExecutor()
     private lateinit var account: SellerAccount
-    private val primary = Color.rgb(245, 81, 30)
+    private val primary = Color.rgb(56, 142, 60)
     private val danger = Color.rgb(200, 40, 40)
     private var liveId: Int = -1
     private lateinit var statusText: TextView

@@ -26,10 +26,10 @@ class MainActivity : SessionActivity() {
     private lateinit var xuApi: XuApi
     private val executor = Executors.newSingleThreadExecutor()
     private val handler = Handler(Looper.getMainLooper())
-    private val primary = Color.rgb(245, 81, 30)
+    private val primary = Color.rgb(56, 142, 60)
     private val dark = Color.rgb(38, 38, 38)
     private val secondary = Color.rgb(107, 107, 107)
-    private val bgColor = Color.rgb(255, 248, 245)
+    private val bgColor = Color.rgb(247, 255, 248)
     private val danger = Color.rgb(198, 40, 40)
     private val ok = Color.rgb(46, 125, 50)
 
@@ -117,7 +117,7 @@ class MainActivity : SessionActivity() {
         val cell = FrameLayout(this)
         cell.addView(TextView(this).apply {
             text = "👤"; textSize = 19f; gravity = Gravity.CENTER
-            background = bg(if (loggedIn) Color.rgb(224, 247, 233) else Color.rgb(255, 240, 234), 22)
+            background = bg(if (loggedIn) Color.rgb(224, 247, 233) else Color.rgb(238, 238, 238), 22)
             setOnClickListener { showProfile() }
         }, FrameLayout.LayoutParams(dp(44), dp(44)))
         if (loggedIn) {
@@ -310,7 +310,7 @@ class MainActivity : SessionActivity() {
         // Ảnh món ăn to hơn trước và có thể bấm vào để xem phóng to (chụm/mở
         // 2 ngón tay để zoom, kéo xem chi tiết), giống hệt cách xem banner —
         // vuốt trái/phải để xem lần lượt các món khác trong danh sách đang hiện.
-        val img = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; background = bg(Color.rgb(255, 245, 240), 14); clipToOutline = true }
+        val img = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; background = bg(Color.rgb(240, 250, 241), 14); clipToOutline = true }
         card.addView(img, LinearLayout.LayoutParams(dp(86), dp(86)))
         ImageLoader.load(img, f.image)
         // Bấm vào ẢNH và bấm vào TÊN/MÔ TẢ (info) đều mở "Chi tiết món" ngay lập
@@ -372,7 +372,7 @@ class MainActivity : SessionActivity() {
         c.addView(label("Còn ${f.stock} phần", 13f, secondary))
         if (f.description.isNotBlank()) c.addView(label(f.description, 15f, dark))
 
-        val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = bg(Color.rgb(255,250,236),16); setPadding(dp(14),dp(12),dp(14),dp(12)) }
+        val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = bg(Color.rgb(232,245,233),16); setPadding(dp(14),dp(12),dp(14),dp(12)) }
         info.addView(label("🪙 XU khi xem món", 17f, dark, true))
         info.addView(label("Xem đủ 30 giây: +10 XU. Xem đủ 10 món: thưởng thêm 100 XU. Tối đa 200 XU/giờ và 2.000 XU/ngày.", 13f, secondary))
         val timer = label("⏱ Đang tính thời gian xem: 30 giây", 14f, primary, true); info.addView(timer)
@@ -530,7 +530,7 @@ class MainActivity : SessionActivity() {
                 val f = map[id] ?: run { cart.remove(id); return@forEach }
                 total += f.price * qty
                 val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; background = bg(Color.WHITE, 14); setPadding(dp(10), dp(9), dp(10), dp(9)); layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) } }
-                val img = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; background = bg(Color.rgb(255, 245, 240), 12) }
+                val img = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; background = bg(Color.rgb(240, 250, 241), 12) }
                 row.addView(img, LinearLayout.LayoutParams(dp(52), dp(52))); ImageLoader.load(img, f.image)
                 row.addView(label("${f.name}\n${money(f.price)}", 15f, dark, true), LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(8) })
                 val stepper = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }

@@ -51,10 +51,10 @@ class HomeActivity : SessionActivity() {
     private lateinit var account: AccountSync
     private var selectedKcnId: Int = 0
     private var selectedKcnName: String = ""
-    private val primary = Color.rgb(245, 81, 30)
-    private val primaryDark = Color.rgb(208, 67, 21)
-    private val accent = Color.rgb(255, 112, 64)
-    private val bgColor = Color.rgb(255, 248, 245)
+    private val primary = Color.rgb(56, 142, 60)
+    private val primaryDark = Color.rgb(27, 94, 32)
+    private val accent = Color.rgb(129, 199, 132)
+    private val bgColor = Color.rgb(247, 255, 248)
     private val text = Color.rgb(38, 38, 38)
     private val secondary = Color.rgb(107, 107, 107)
     // Badge số lượng trên icon 🛒 Giỏ hàng ở thanh điều hướng — cập nhật mỗi khi
@@ -188,13 +188,13 @@ class HomeActivity : SessionActivity() {
     /** Cập nhật màu nền + chấm trạng thái trên icon 👤 Tài khoản theo việc khách đã đăng nhập hay chưa. */
     private fun refreshProfileIcon() {
         val loggedIn = account.isLoggedIn()
-        profileIcon?.background = bg(if (loggedIn) Color.rgb(224, 247, 233) else Color.rgb(255, 240, 234), 22)
+        profileIcon?.background = bg(if (loggedIn) Color.rgb(224, 247, 233) else Color.rgb(238, 238, 238), 22)
         profileDot?.visibility = if (loggedIn) android.view.View.VISIBLE else android.view.View.GONE
     }
 
     private fun showSplash() {
         val root = FrameLayout(this)
-        root.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(primary, accent, Color.rgb(255, 244, 232)))
+        root.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(primary, accent, Color.rgb(232, 245, 233)))
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(dp(28), dp(30), dp(28), dp(30)) }
         box.addView(ImageView(this).apply { setImageResource(R.drawable.com11h_logo); scaleType = ImageView.ScaleType.FIT_CENTER }, LinearLayout.LayoutParams(dp(230), dp(230)))
         box.addView(TextView(this).apply { text = "Cơm 11h"; textSize = 48f; setTextColor(Color.WHITE); setTypeface(null, Typeface.BOLD_ITALIC); gravity = Gravity.CENTER })
@@ -225,8 +225,8 @@ class HomeActivity : SessionActivity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(8), dp(8), dp(14), dp(8))
             background = GradientDrawable().apply {
-                setColor(Color.rgb(255, 128, 0)); cornerRadius = dp(30).toFloat()
-                setStroke(dp(1), Color.rgb(230, 100, 0))
+                setColor(Color.rgb(56, 142, 60)); cornerRadius = dp(30).toFloat()
+                setStroke(dp(1), Color.rgb(27, 94, 32))
             }
             elevation = dp(7).toFloat()
             isClickable = true; isFocusable = true
@@ -234,7 +234,7 @@ class HomeActivity : SessionActivity() {
         }
         val coin = TextView(this).apply {
             text = "🪙"; textSize = 19f; gravity = Gravity.CENTER
-            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.rgb(255, 236, 179)) }
+            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.rgb(200, 230, 201)) }
         }
         bubble.addView(coin, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginEnd = dp(8) })
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -263,7 +263,7 @@ class HomeActivity : SessionActivity() {
         header.addView(label("Food KCN", 20f, primary, true), LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(8) })
         header.addView(TextView(this).apply {
             text = "📍 ${selectedKcnName.ifBlank { "Chọn KCN" }}"; textSize = 10.5f; gravity = Gravity.CENTER; setTextColor(primary)
-            background = bg(Color.rgb(255,244,230), 12); setPadding(dp(6),0,dp(6),0); setOnClickListener { showKcnSelection() }
+            background = bg(Color.rgb(232,245,233), 12); setPadding(dp(6),0,dp(6),0); setOnClickListener { showKcnSelection() }
         }, LinearLayout.LayoutParams(dp(112), dp(40)).apply { marginEnd = dp(6) })
         val profileCell = FrameLayout(this)
         profileIcon = TextView(this).apply { text = "👤"; textSize = 20f; gravity = Gravity.CENTER; setTextColor(primary); setOnClickListener { open("profile") } }
@@ -419,7 +419,7 @@ class HomeActivity : SessionActivity() {
                         }, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
                     }
                     slide.clipToOutline = true
-                    slide.background = bg(Color.rgb(255, 245, 240), 20)
+                    slide.background = bg(Color.rgb(240, 250, 241), 20)
                     val tapIndex = i
                     slide.setOnClickListener { openImages(bannerImages, bannerTitles, tapIndex, bannerIdList) }
                     flipper.addView(slide)
@@ -465,7 +465,7 @@ class HomeActivity : SessionActivity() {
                     // gian xem để tích XU — không còn mở màn xem ảnh rời hay nhảy
                     // thẳng sang Thực đơn nữa (giữ hành vi giống hệt nhau dù bấm
                     // vào ảnh hay vào tên/giá món).
-                    val img = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; background = bg(Color.rgb(255, 245, 240), 14); clipToOutline = true }
+                    val img = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; background = bg(Color.rgb(240, 250, 241), 14); clipToOutline = true }
                     card.addView(img, LinearLayout.LayoutParams(dp(68), dp(68))); ImageLoader.load(img, imageUrl)
                     img.setOnClickListener { openFoodDetail(f) }
                     val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(10), 0, 0, 0) }
@@ -526,7 +526,7 @@ class HomeActivity : SessionActivity() {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(dp(112), dp(148)).apply { marginEnd = dp(10) }
         }
-        val img = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; background = bg(Color.rgb(255, 245, 240), 14); clipToOutline = true }
+        val img = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; background = bg(Color.rgb(240, 250, 241), 14); clipToOutline = true }
         card.addView(img, LinearLayout.LayoutParams(dp(112), dp(100)))
         ImageLoader.load(img, imageUrl)
         card.addView(label(name, 12.5f, text, true).apply {

@@ -12,7 +12,7 @@ import java.util.concurrent.Executors
 /** Danh sách phiên live đang phát (public — không cần đăng nhập để xem danh sách). */
 class LiveListActivity : SessionActivity() {
     private val executor = Executors.newSingleThreadExecutor()
-    private val primary = Color.rgb(245, 81, 30)
+    private val primary = Color.rgb(56, 142, 60)
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {

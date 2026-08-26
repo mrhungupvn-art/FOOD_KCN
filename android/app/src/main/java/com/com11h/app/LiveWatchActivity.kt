@@ -33,7 +33,7 @@ class LiveWatchActivity : SessionActivity() {
     private var webView: WebView? = null
     private lateinit var chatBox: LinearLayout
     private lateinit var chatScroll: ScrollView
-    private val primary = Color.rgb(245, 81, 30)
+    private val primary = Color.rgb(56, 142, 60)
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     companion object { private const val SITE_URL = "https://com11h.com" }
