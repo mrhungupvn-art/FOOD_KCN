@@ -205,6 +205,55 @@ class HomeActivity : SessionActivity() {
 
     private fun label(value: String, size: Float, color: Int = text, bold: Boolean = false) = TextView(this).apply { text = value; textSize = size; setTextColor(color); if (bold) setTypeface(null, Typeface.BOLD) }
 
+    /**
+     * Bong bóng nhắc nhở nổi ở GÓC PHẢI DƯỚI màn hình, chỉ có ở Trang chủ (do
+     * chỉ được gắn trong shell() của HomeActivity) — nhắc khách "xem món để
+     * nhận Xu", giống cơ chế "xem sản phẩm nhận xu" quen thuộc. Bấm vào mở
+     * ngay Thực đơn để khách bắt đầu xem món (xem đủ 30 giây/món được +10 Xu,
+     * xem đủ 10 món khác nhau được thưởng thêm 100 Xu — theo XuStore/README
+     * XU). Tự ẩn nếu khách đã đạt giới hạn Xu trong giờ/ngày, để không nhắc
+     * nhở vô ích khi không thể nhận thêm Xu nữa.
+     */
+    private fun xuReminderBubble(): View {
+        val st = XuStore.state(this)
+        if (st.hourXu >= 200 || st.dayXu >= 2000) return View(this).apply { visibility = View.GONE }
+
+        val bubble = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), dp(8), dp(14), dp(8))
+            background = GradientDrawable().apply {
+                setColor(Color.WHITE); cornerRadius = dp(30).toFloat()
+                setStroke(dp(1), Color.rgb(255, 202, 128))
+            }
+            elevation = dp(7).toFloat()
+            isClickable = true; isFocusable = true
+            setOnClickListener { open("menu") }
+        }
+        val coin = TextView(this).apply {
+            text = "🪙"; textSize = 19f; gravity = Gravity.CENTER
+            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.rgb(255, 236, 179)) }
+        }
+        bubble.addView(coin, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginEnd = dp(8) })
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        col.addView(TextView(this).apply { text = "Xem món nhận Xu"; textSize = 12.5f; setTypeface(null, Typeface.BOLD); setTextColor(text) })
+        col.addView(TextView(this).apply { text = "Xem 30s +10 Xu"; textSize = 10f; setTextColor(secondary) })
+        bubble.addView(col)
+
+        // Nhấp nháy phóng to/thu nhỏ nhẹ ở icon xu để thu hút sự chú ý, không
+        // làm dịch chuyển bố cục xung quanh (chỉ animate chính icon).
+        coin.startAnimation(android.view.animation.ScaleAnimation(
+            1f, 1.12f, 1f, 1.12f,
+            android.view.animation.Animation.RELATIVE_TO_SELF, 0.5f,
+            android.view.animation.Animation.RELATIVE_TO_SELF, 0.5f
+        ).apply {
+            duration = 650
+            repeatMode = android.view.animation.Animation.REVERSE
+            repeatCount = android.view.animation.Animation.INFINITE
+        })
+        return bubble
+    }
+
     private fun shell(): LinearLayout {
         val outer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bgColor) }
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), dp(9), dp(14), dp(8)); setBackgroundColor(Color.WHITE) }
@@ -507,7 +556,15 @@ class HomeActivity : SessionActivity() {
 
     private fun showHome() {
         val shell = shell()
-        setContentView(shell)
+        // Bọc shell (header + nội dung cuộn + thanh điều hướng) trong FrameLayout
+        // để có thể "đè" bong bóng nhắc nhở Xu nổi cố định ở góc phải dưới màn
+        // hình, luôn nổi trên mọi thứ kể cả khi cuộn trang — chỉ ở Trang chủ.
+        val root = FrameLayout(this)
+        root.addView(shell, FrameLayout.LayoutParams(-1, -1))
+        root.addView(xuReminderBubble(), FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.END).apply {
+            bottomMargin = dp(58 + 16); rightMargin = dp(14)
+        })
+        setContentView(root)
         val scroll = shell.getChildAt(1) as ScrollView
         val content = scroll.getChildAt(0) as LinearLayout
         newsVideoReady = false
