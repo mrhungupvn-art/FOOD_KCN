@@ -3,7 +3,7 @@ package com.com11h.app
 import android.content.Context
 import org.json.JSONArray
 
-/** Lưu món yêu thích cục bộ, không cần thêm API phía server. */
+/** Lưu món yêu thích cục bộ, không cần API riêng. */
 object FavoriteStore {
     private const val PREFS = "com11h_local"
     private const val KEY = "favorite_food_ids"
@@ -28,5 +28,10 @@ object FavoriteStore {
         set.forEach { a.put(it) }
         prefs(context).edit().putString(KEY, a.toString()).apply()
         return added
+    }
+
+    /** Xóa danh sách món yêu thích khi khách chuyển sang một KCN khác. */
+    fun clear(context: Context) {
+        prefs(context).edit().remove(KEY).apply()
     }
 }
