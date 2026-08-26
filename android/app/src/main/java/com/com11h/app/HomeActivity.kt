@@ -571,7 +571,12 @@ class HomeActivity : SessionActivity() {
             runOnUiThread{
                 root.removeView(loading)
                 if(r==null||!r.optBoolean("ok")){root.addView(label("Không tải được danh sách KCN. ${r?.optString("message")?:("Vui lòng thử lại.")}",14f,secondary));return@runOnUiThread}
-                val arr=r.optJSONObject("data")?.optJSONArray("industrial_zones")?:JSONArray()
+                val data = r.opt("data")
+                val arr = when (data) {
+                    is JSONArray -> data
+                    is JSONObject -> data.optJSONArray("industrial_zones") ?: JSONArray()
+                    else -> JSONArray()
+                }
                 if(arr.length()==0){root.addView(label("Chưa có KCN nào đang hoạt động.",15f,secondary));return@runOnUiThread}
                 for(i in 0 until arr.length()){
                     val z=arr.getJSONObject(i)
