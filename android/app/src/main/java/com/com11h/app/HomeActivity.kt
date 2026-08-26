@@ -236,7 +236,7 @@ class HomeActivity : SessionActivity() {
         }
         bubble.addView(coin, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginEnd = dp(8) })
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        col.addView(TextView(this).apply { text = "Xem món nhận Xu"; textSize = 12.5f; setTypeface(null, Typeface.BOLD); setTextColor(text) })
+        col.addView(TextView(this).apply { text = "Xem món nhận Xu"; textSize = 12.5f; setTypeface(null, Typeface.BOLD); setTextColor(this@HomeActivity.text) })
         col.addView(TextView(this).apply { text = "Xem 30s +10 Xu"; textSize = 10f; setTextColor(secondary) })
         bubble.addView(col)
 
