@@ -29,11 +29,8 @@ object KcnStore {
         if (newId > 0 && oldId > 0 && oldId != newId) {
             // Đổi KCN = chuyển tenant. Không mang phiên đăng nhập, giỏ hàng
             // hoặc món yêu thích của tenant cũ sang tenant mới.
-            context.getSharedPreferences(SECURE_PREFS, Context.MODE_PRIVATE)
-                .edit()
-                .remove("token")
-                .remove("last_active")
-                .apply()
+            // Token được AccountSync lưu theo token_<kcn_id>, vì vậy không xóa
+            // phiên KCN cũ khi chuyển KCN. Mỗi KCN giữ tài khoản độc lập.
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .edit()
                 .putString("cart", "[]")

@@ -24,29 +24,33 @@ class AccountSync(context: Context) {
     private val appContext = context.applicationContext
     private val prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    fun token(): String? = prefs.getString(TOKEN, null)
+    private fun kcnId(): Int = KcnStore.id(appContext)
+    private fun tokenKey(): String = if (kcnId() > 0) "${TOKEN}_${kcnId()}" else TOKEN
+    private fun activeKey(): String = if (kcnId() > 0) "${LAST_ACTIVE}_${kcnId()}" else LAST_ACTIVE
+
+    // Mỗi KCN là một tenant/database: lưu token riêng theo KCN để khách có thể
+    // đăng nhập ở nhiều KCN trên cùng thiết bị mà không bị mất phiên KCN khác.
+    fun token(): String? = prefs.getString(tokenKey(), null)
     fun isLoggedIn(): Boolean = !token().isNullOrBlank()
 
     fun saveToken(value: String) {
         prefs.edit()
-            .putString(TOKEN, value)
-            .putLong(LAST_ACTIVE, System.currentTimeMillis())
+            .putString(tokenKey(), value)
+            .putLong(activeKey(), System.currentTimeMillis())
             .apply()
     }
 
     fun logout() = prefs.edit()
-        .remove(TOKEN)
-        .remove(LAST_ACTIVE)
+        .remove(tokenKey())
+        .remove(activeKey())
         .apply()
 
     fun touch() {
-        if (isLoggedIn()) {
-            prefs.edit().putLong(LAST_ACTIVE, System.currentTimeMillis()).apply()
-        }
+        if (isLoggedIn()) prefs.edit().putLong(activeKey(), System.currentTimeMillis()).apply()
     }
 
     fun isSessionExpired(): Boolean {
-        val last = prefs.getLong(LAST_ACTIVE, 0L)
+        val last = prefs.getLong(activeKey(), 0L)
         if (last == 0L) return false
         return System.currentTimeMillis() - last > IDLE_TIMEOUT_MS
     }
