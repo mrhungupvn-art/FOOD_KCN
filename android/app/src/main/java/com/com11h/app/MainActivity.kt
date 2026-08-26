@@ -253,7 +253,7 @@ class MainActivity : SessionActivity() {
 
         executor.execute {
             try {
-                val r = account.request("menu")
+                val r = account.request("menu", query = mapOf("kcn_id" to KcnStore.id(this).toString()))
                 runOnUiThread {
                     listBox.removeView(loadingView)
                     if (!r.optBoolean("ok")) { listBox.addView(label("Không tải được thực đơn. ${r.optString("message")}", 14f, danger)); return@runOnUiThread }
@@ -545,7 +545,7 @@ class MainActivity : SessionActivity() {
         }
 
         executor.execute {
-            val r = if (foodsCache.isNotEmpty()) null else account.request("menu")
+            val r = if (foodsCache.isNotEmpty()) null else account.request("menu", query = mapOf("kcn_id" to KcnStore.id(this).toString()))
             runOnUiThread {
                 listBox.removeView(loadingView)
                 val foods = if (foodsCache.isNotEmpty()) foodsCache else {
@@ -597,7 +597,7 @@ class MainActivity : SessionActivity() {
             if (time.text.toString().trim().isBlank()) { toast("Vui lòng nhập giờ giao hàng"); return@button }
             summaryBox.removeAllViews(); val loadingView = loading(summaryBox, "Đang kiểm tra đơn hàng & khoảng cách giao hàng...")
             executor.execute {
-                val body = JSONObject().put("address", address.text.toString().trim()).put("items", itemsJson()).toString()
+                val body = JSONObject().put("address", address.text.toString().trim()).put("kcn_id", KcnStore.id(this)).put("items", itemsJson()).toString()
                 val r = account.request("order_preview", "POST", body)
                 val data0 = r.optJSONObject("data") ?: JSONObject()
                 // Nếu server chưa tự tính khoảng cách (chưa có distance_km),
@@ -924,7 +924,7 @@ class MainActivity : SessionActivity() {
         }
         val loadingView = loading(box, "Đang tải món yêu thích...")
         executor.execute {
-            val r = try { account.request("menu") } catch (_: Exception) { null }
+            val r = try { account.request("menu", query = mapOf("kcn_id" to KcnStore.id(this).toString())) } catch (_: Exception) { null }
             runOnUiThread {
                 box.removeView(loadingView)
                 val arr = r?.optJSONObject("data")?.optJSONArray("foods") ?: JSONArray()

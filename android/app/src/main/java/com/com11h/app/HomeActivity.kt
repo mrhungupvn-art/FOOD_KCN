@@ -49,6 +49,8 @@ class HomeActivity : SessionActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private val executor = Executors.newSingleThreadExecutor()
     private lateinit var account: AccountSync
+    private var selectedKcnId: Int = 0
+    private var selectedKcnName: String = ""
     private val primary = Color.rgb(245, 81, 30)
     private val primaryDark = Color.rgb(208, 67, 21)
     private val accent = Color.rgb(255, 112, 64)
@@ -104,7 +106,7 @@ class HomeActivity : SessionActivity() {
     private fun bg(color: Int, radius: Int = 18) = GradientDrawable().apply { setColor(color); cornerRadius = dp(radius).toFloat() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState); account = AccountSync(this)
+        super.onCreate(savedInstanceState); account = AccountSync(this); selectedKcnId = KcnStore.id(this); selectedKcnName = KcnStore.name(this)
         // Video bị đóng hẳn (khách bấm ✕ trên bong bóng nổi, ở bất kỳ màn hình
         // nào) -> ẩn lại khối "📰 Tin Tức" trên Trang chủ như lúc chưa có video.
         FloatingVideoManager.onClosed = {
@@ -200,7 +202,7 @@ class HomeActivity : SessionActivity() {
         box.addView(TextView(this).apply { text = "Ngon mỗi ngày • Nóng hổi • Giao tận nơi"; textSize = 15f; setTextColor(Color.WHITE); gravity = Gravity.CENTER })
         root.addView(box, FrameLayout.LayoutParams(-1, -2, Gravity.CENTER))
         setContentView(root)
-        handler.postDelayed({ showHome() }, 3000)
+        handler.postDelayed({ if (selectedKcnId > 0) showHome() else showKcnSelection() }, 3000)
     }
 
     private fun label(value: String, size: Float, color: Int = text, bold: Boolean = false) = TextView(this).apply { text = value; textSize = size; setTextColor(color); if (bold) setTypeface(null, Typeface.BOLD) }
@@ -258,7 +260,11 @@ class HomeActivity : SessionActivity() {
         val outer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bgColor) }
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), dp(9), dp(14), dp(8)); setBackgroundColor(Color.WHITE) }
         header.addView(ImageView(this).apply { setImageResource(R.drawable.com11h_logo); scaleType = ImageView.ScaleType.FIT_CENTER }, LinearLayout.LayoutParams(dp(48), dp(48)))
-        header.addView(label("Cơm 11h xin chào ! ", 20f, primary, true), LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(8) })
+        header.addView(label("Food KCN", 20f, primary, true), LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(8) })
+        header.addView(TextView(this).apply {
+            text = "📍 ${selectedKcnName.ifBlank { "Chọn KCN" }}"; textSize = 10.5f; gravity = Gravity.CENTER; setTextColor(primary)
+            background = bg(Color.rgb(255,244,230), 12); setPadding(dp(6),0,dp(6),0); setOnClickListener { showKcnSelection() }
+        }, LinearLayout.LayoutParams(dp(112), dp(40)).apply { marginEnd = dp(6) })
         val profileCell = FrameLayout(this)
         profileIcon = TextView(this).apply { text = "👤"; textSize = 20f; gravity = Gravity.CENTER; setTextColor(primary); setOnClickListener { open("profile") } }
         profileCell.addView(profileIcon, FrameLayout.LayoutParams(dp(44), dp(44)))
@@ -439,7 +445,7 @@ class HomeActivity : SessionActivity() {
         val popularLoading = label("⏳ Đang tải món ăn...", 15f, secondary)
         popularBox.addView(popularLoading)
         executor.execute {
-            val r = account.request("menu")
+            val r = account.request("menu", query = mapOf("kcn_id" to selectedKcnId.toString()))
             runOnUiThread {
                 if (popularBox != this.popularBox) return@runOnUiThread // màn hình đã đổi/hủy trong lúc chờ tải
                 popularBox.removeView(popularLoading)
@@ -482,7 +488,7 @@ class HomeActivity : SessionActivity() {
         row.removeAllViews()
         row.addView(label("⏳ Đang tải...", 14f, secondary).apply { setPadding(dp(4), dp(10), dp(4), dp(10)) })
         executor.execute {
-            val r = try { account.request("menu") } catch (_: Exception) { null }
+            val r = try { account.request("menu", query = mapOf("kcn_id" to selectedKcnId.toString())) } catch (_: Exception) { null }
             runOnUiThread {
                 if (row != this.vipRow) return@runOnUiThread // màn hình đã đổi/hủy trong lúc chờ tải
                 row.removeAllViews()
@@ -552,6 +558,34 @@ class HomeActivity : SessionActivity() {
         }
         vipAutoScrollRunnable = runnable
         handler.post(runnable)
+    }
+
+    private fun showKcnSelection() {
+        val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER_HORIZONTAL;setBackgroundColor(bgColor);setPadding(dp(20),dp(30),dp(20),dp(20))}
+        root.addView(ImageView(this).apply{setImageResource(R.drawable.com11h_logo);scaleType=ImageView.ScaleType.FIT_CENTER},LinearLayout.LayoutParams(dp(150),dp(150)))
+        root.addView(label("FOOD KCN",30f,primary,true))
+        root.addView(label("Bạn đang làm việc tại KCN nào?",18f,text,true).apply{setPadding(0,dp(8),0,dp(18))})
+        val loading=label("⏳ Đang tải danh sách KCN...",15f,secondary);root.addView(loading)
+        executor.execute{
+            val r=try{account.request("kcn_list")}catch(_:Exception){null}
+            runOnUiThread{
+                root.removeView(loading)
+                if(r==null||!r.optBoolean("ok")){root.addView(label("Không tải được danh sách KCN. ${r?.optString("message")?:("Vui lòng thử lại.")}",14f,secondary));return@runOnUiThread}
+                val arr=r.optJSONObject("data")?.optJSONArray("industrial_zones")?:JSONArray()
+                if(arr.length()==0){root.addView(label("Chưa có KCN nào đang hoạt động.",15f,secondary));return@runOnUiThread}
+                for(i in 0 until arr.length()){
+                    val z=arr.getJSONObject(i)
+                    val card=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;background=bg(Color.WHITE,16);setPadding(dp(15),dp(13),dp(15),dp(13));setOnClickListener{
+                        val newId=z.optInt("id")
+                        if (selectedKcnId != 0 && selectedKcnId != newId) { getSharedPreferences("com11h_local", MODE_PRIVATE).edit().putString("cart", "[]").apply() }
+                        KcnStore.save(this@HomeActivity,z); selectedKcnId=newId; selectedKcnName=z.optString("name"); showHome()
+                    }}
+                    card.addView(label("🏭 ${z.optString("name")}",18f,text,true)); val loc=listOf(z.optString("province"),z.optString("district")).filter{it.isNotBlank()}.joinToString(" • "); if(loc.isNotBlank())card.addView(label("📍 $loc",13f,secondary)); card.addView(label("🏪 ${z.optInt("store_count")} cửa hàng",13f,primary,true)); root.addView(card,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(10)})
+                }
+            }
+        }
+        root.addView(label("Bạn có thể đổi KCN bất cứ lúc nào.",12.5f,secondary).apply{setPadding(0,dp(8),0,0)})
+        setContentView(root)
     }
 
     private fun showHome() {
