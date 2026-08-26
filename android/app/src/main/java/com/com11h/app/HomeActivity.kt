@@ -309,6 +309,25 @@ class HomeActivity : SessionActivity() {
         startActivity(i)
     }
 
+    /**
+     * Mở ngay màn "Chi tiết món" (MainActivity.showFoodDetail) — hiện đầy đủ
+     * ảnh + tên + giá + mô tả món ngay lập tức, để hệ thống bắt đầu tính thời
+     * gian xem (đủ 30 giây được +10 XU). Dùng chung cho MỌI nơi khách bấm vào
+     * món ăn ở Trang chủ (cả ảnh lẫn phần chữ), dù đang ở "Menu Vip" hay "Món
+     * ăn phổ biến" — khớp với hành vi bấm vào món trong màn "Thực đơn".
+     */
+    private fun openFoodDetail(f: JSONObject) {
+        val i = Intent(this, MainActivity::class.java).putExtra("screen", "food_detail")
+        i.putExtra("food_id", f.optInt("id"))
+        i.putExtra("food_name", f.optString("name"))
+        i.putExtra("food_price", f.optInt("price"))
+        i.putExtra("food_stock", f.optInt("stock"))
+        i.putExtra("food_category", f.optString("category"))
+        i.putExtra("food_description", f.optString("description"))
+        i.putExtra("food_image", f.optString("image"))
+        startActivity(i)
+    }
+
     /** Tải banner trang chủ từ api?action=banners (đồng bộ Admin > Banner trang chủ) và hiển thị dạng slider tự chạy. */
     private fun loadBanners(container: FrameLayout) {
         executor.execute {
@@ -381,23 +400,22 @@ class HomeActivity : SessionActivity() {
                 for (i in 0 until arr.length()) list.add(arr.getJSONObject(i))
                 list.shuffle()
                 val count = minOf(6, list.size)
-                val shownImages = (0 until count).map { list[it].optString("image") }
-                val shownNames = (0 until count).map { list[it].optString("name") }
                 for (i in 0 until count) {
                     val f = list[i]
                     val name = f.optString("name")
                     val imageUrl = f.optString("image")
                     val card = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(12), dp(12), dp(12)); background = bg(Color.WHITE, 16); layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) } }
-                    // Ảnh món ăn to hơn trước và có thể bấm vào để xem phóng to
-                    // (chụm/mở 2 ngón tay để zoom), giống hệt cách xem banner —
-                    // vuốt trái/phải để xem sang món khác trong đúng 6 món này.
+                    // Bấm vào món ăn (ẢNH và cả PHẦN CHỮ) mở ngay "Chi tiết món" để
+                    // khách thấy đầy đủ ảnh + thông tin món và bắt đầu tính thời
+                    // gian xem để tích XU — không còn mở màn xem ảnh rời hay nhảy
+                    // thẳng sang Thực đơn nữa (giữ hành vi giống hệt nhau dù bấm
+                    // vào ảnh hay vào tên/giá món).
                     val img = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; background = bg(Color.rgb(255, 245, 240), 14); clipToOutline = true }
                     card.addView(img, LinearLayout.LayoutParams(dp(68), dp(68))); ImageLoader.load(img, imageUrl)
-                    val tapIndex = i
-                    img.setOnClickListener { openImages(shownImages, shownNames, tapIndex) }
+                    img.setOnClickListener { openFoodDetail(f) }
                     val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(10), 0, 0, 0) }
                     info.addView(label(name, 17f, text, true)); info.addView(label(String.format("%,d", f.optInt("price")).replace(',', '.') + "đ", 16f, primary, true)); info.addView(label("còn ${f.optInt("stock")} phần", 13f, secondary)); card.addView(info, LinearLayout.LayoutParams(0, -2, 1f))
-                    info.setOnClickListener { open("menu") }
+                    info.setOnClickListener { openFoodDetail(f) }
                     popularBox.addView(card)
                 }
             }
@@ -438,10 +456,17 @@ class HomeActivity : SessionActivity() {
         }
     }
 
-    /** Một thẻ ảnh món trong dải "Menu Vip": ảnh + tên + giá, bấm vào để xem ảnh to và tự thêm vào giỏ. */
+    /**
+     * Một thẻ ảnh món trong dải "Menu Vip": ảnh + tên + giá. Bấm vào bất kỳ
+     * đâu trên thẻ (ảnh lẫn tên/giá) đều mở ngay "Chi tiết món" — hiện đầy đủ
+     * ảnh + thông tin món để bắt đầu tính thời gian xem tích XU, giống hệt
+     * hành vi bấm vào món ở "Món ăn phổ biến" và ở màn "Thực đơn". Việc thêm
+     * vào giỏ hàng giờ thực hiện bằng nút "🛒 Thêm vào giỏ" ngay trong màn chi
+     * tiết đó, không tự động thêm khi vừa chạm vào thẻ nữa.
+     */
     private fun vipCard(f: JSONObject): View {
-        val id = f.optInt("id"); val name = f.optString("name"); val imageUrl = f.optString("image")
-        val price = f.optInt("price"); val stock = f.optInt("stock")
+        val name = f.optString("name"); val imageUrl = f.optString("image")
+        val price = f.optInt("price")
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(dp(112), dp(148)).apply { marginEnd = dp(10) }
@@ -453,39 +478,8 @@ class HomeActivity : SessionActivity() {
             maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; setPadding(0, dp(5), 0, 0)
         })
         card.addView(label(String.format("%,d", price).replace(',', '.') + "đ", 12.5f, primary, true))
-        card.setOnClickListener { onVipFoodTap(id, name, imageUrl, stock) }
+        card.setOnClickListener { openFoodDetail(f) }
         return card
-    }
-
-    /** Bấm vào 1 món trong "Menu Vip": tự thêm 1 phần vào giỏ hàng, rồi mở ảnh phóng to — vuốt được qua các món Vip khác theo đúng thứ tự. */
-    private fun onVipFoodTap(id: Int, name: String, imageUrl: String, stock: Int) {
-        addVipToCart(id, name, stock)
-        val images = vipUniqueList.map { it.optString("image") }
-        val names = vipUniqueList.map { it.optString("name") }
-        val tapIndex = vipUniqueList.indexOfFirst { it.optInt("id") == id }.coerceAtLeast(0)
-        if (images.isNotEmpty()) openImages(images, names, tapIndex) else openImages(listOf(imageUrl), listOf(name), 0)
-    }
-
-    /** Thêm 1 phần món vào giỏ hàng cục bộ (cùng định dạng/nơi lưu với MainActivity), rồi cập nhật badge 🛒. */
-    private fun addVipToCart(id: Int, name: String, stock: Int) {
-        val p = getSharedPreferences("com11h_local", MODE_PRIVATE)
-        val arr = try { JSONArray(p.getString("cart", "[]")) } catch (_: Exception) { JSONArray() }
-        var found = false
-        for (i in 0 until arr.length()) {
-            val o = arr.getJSONObject(i)
-            if (o.optInt("id") == id) {
-                val q = o.optInt("qty")
-                if (stock in 0 until q + 1) { toast("Chỉ còn $stock phần \"$name\""); return }
-                o.put("qty", q + 1); found = true; break
-            }
-        }
-        if (!found) {
-            if (stock < 1) { toast("Món \"$name\" đã hết hàng"); return }
-            arr.put(JSONObject().put("id", id).put("qty", 1))
-        }
-        p.edit().putString("cart", arr.toString()).apply()
-        refreshCartBadge()
-        toast("Đã thêm \"$name\" vào giỏ hàng")
     }
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()

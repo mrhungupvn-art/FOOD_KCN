@@ -41,6 +41,45 @@ class MainActivity : SessionActivity() {
     // Badge số lượng trên icon 🛒 Giỏ hàng ở thanh điều hướng của màn hình đang mở.
     private var cartBadge: TextView? = null
 
+    // =========================================================================
+    // NGĂN XẾP "MÀN HÌNH TRƯỚC ĐÓ" — dùng cho nút bấm "‹" (trở lại) ở đầu mỗi
+    // màn. Mỗi khi khách bấm vào 1 món/nút để đi SÂU HƠN vào 1 màn con (ví dụ:
+    // Thực đơn -> Chi tiết món, Đơn hàng -> Chi tiết đơn), ta lưu lại 1 hàm
+    // dựng-lại-màn-hiện-tại vào ngăn xếp này TRƯỚC khi mở màn con. Bấm "‹" sẽ
+    // lấy đúng màn vừa lưu ra và dựng lại — tức luôn quay về ĐÚNG mục trước đó
+    // khách đang xem, thay vì luôn nhảy thẳng về Trang chủ như trước đây.
+    // Chỉ khi ngăn xếp rỗng (đang ở màn gốc, mở thẳng từ Trang chủ/thanh điều
+    // hướng dưới) thì "‹" mới về Trang chủ — đúng như kỳ vọng: đó chính là màn
+    // trước đó thật sự trong trường hợp này.
+    // =========================================================================
+    private val backStack = ArrayDeque<() -> Unit>()
+
+    /** Lưu màn [current] vào ngăn xếp rồi mở màn con [next]. */
+    private fun push(current: () -> Unit, next: () -> Unit) {
+        backStack.addLast(current)
+        next()
+    }
+
+    /** Xử lý nút "‹" và nút Back của điện thoại: quay về đúng màn trước đó nếu có, hết ngăn xếp mới về Trang chủ. */
+    private fun goBack() {
+        if (backStack.isNotEmpty()) {
+            val prev = backStack.removeLast()
+            prev()
+        } else {
+            startActivity(Intent(this, HomeActivity::class.java)); finish()
+        }
+    }
+
+    /** Bấm vào 1 trong 5 tab của thanh điều hướng dưới là chuyển hẳn sang mục khác (không phải "đi sâu vào 1 màn con"), nên xoá ngăn xếp — "‹" ở mục mới sẽ về Trang chủ, đúng như bấm trực tiếp từ Trang chủ. */
+    private fun switchTab(render: () -> Unit) {
+        backStack.clear()
+        render()
+    }
+
+    override fun onBackPressed() {
+        if (backStack.isNotEmpty()) { goBack() } else { super.onBackPressed() }
+    }
+
     data class Food(
         val id: Int, val name: String, val price: Int, val stock: Int,
         val category: String, val description: String, val image: String
@@ -104,6 +143,22 @@ class MainActivity : SessionActivity() {
             "xu" -> showXu()
             "favorites" -> showFavorites()
             "profile" -> showProfile()
+            // Mở thẳng "Chi tiết món" khi khách bấm vào 1 món ở Trang chủ (Menu
+            // Vip hoặc Món ăn phổ biến) — xem HomeActivity.openFoodDetail(). Món
+            // được truyền nguyên qua các extra bên dưới nên hiện đủ ảnh + thông
+            // tin ngay lập tức, không cần gọi lại API, và bắt đầu tính thời gian
+            // xem để tích XU giống hệt lúc bấm vào món trong màn Thực đơn.
+            "food_detail" -> showFoodDetail(
+                Food(
+                    intent.getIntExtra("food_id", 0),
+                    intent.getStringExtra("food_name") ?: "",
+                    intent.getIntExtra("food_price", 0),
+                    intent.getIntExtra("food_stock", 0),
+                    intent.getStringExtra("food_category") ?: "",
+                    intent.getStringExtra("food_description") ?: "",
+                    intent.getStringExtra("food_image") ?: ""
+                )
+            )
             else -> { startActivity(Intent(this, HomeActivity::class.java)); finish() }
         }
     }
@@ -129,14 +184,14 @@ class MainActivity : SessionActivity() {
     private fun shell(title: String, selected: Int): LinearLayout {
         val outer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bgColor) }
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(8), dp(12), dp(8)); setBackgroundColor(Color.WHITE) }
-        header.addView(TextView(this).apply { text = "‹"; textSize = 34f; setTextColor(primary); gravity = Gravity.CENTER; setOnClickListener { startActivity(Intent(this@MainActivity, HomeActivity::class.java)); finish() } }, LinearLayout.LayoutParams(dp(42), dp(48)))
+        header.addView(TextView(this).apply { text = "‹"; textSize = 34f; setTextColor(primary); gravity = Gravity.CENTER; setOnClickListener { goBack() } }, LinearLayout.LayoutParams(dp(42), dp(48)))
         header.addView(label(title, 20f, primary, true), LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(4) })
         header.addView(profileIconCell(), LinearLayout.LayoutParams(dp(44), dp(44))); outer.addView(header)
         val scroll = ScrollView(this); val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(12), dp(14), dp(18)) }; scroll.addView(content); outer.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         val nav = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(Color.WHITE); elevation = dp(8).toFloat() }
         listOf("⌂\nTrang chủ", "▦\nThực đơn", "🛒\nGiỏ hàng", "▤\nĐơn hàng", "♙\nTài khoản").forEachIndexed { i, name ->
             val cell = FrameLayout(this)
-            cell.addView(TextView(this).apply { text = name; textSize = 10f; gravity = Gravity.CENTER; setTextColor(if (i == selected) primary else secondary); setTypeface(null, if (i == selected) Typeface.BOLD else Typeface.NORMAL); setOnClickListener { when (i) { 0 -> { startActivity(Intent(this@MainActivity, HomeActivity::class.java)); finish() }; 1 -> showMenu(); 2 -> showCart(); 3 -> showOrders(); 4 -> showProfile() } } }, FrameLayout.LayoutParams(-1, -1))
+            cell.addView(TextView(this).apply { text = name; textSize = 10f; gravity = Gravity.CENTER; setTextColor(if (i == selected) primary else secondary); setTypeface(null, if (i == selected) Typeface.BOLD else Typeface.NORMAL); setOnClickListener { when (i) { 0 -> { startActivity(Intent(this@MainActivity, HomeActivity::class.java)); finish() }; 1 -> switchTab { showMenu() }; 2 -> switchTab { showCart() }; 3 -> switchTab { showOrders() }; 4 -> switchTab { showProfile() } } } }, FrameLayout.LayoutParams(-1, -1))
             if (i == 2) {
                 cartBadge = TextView(this).apply {
                     textSize = 9.5f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; setTypeface(null, Typeface.BOLD)
@@ -250,7 +305,7 @@ class MainActivity : SessionActivity() {
         }
     }
 
-    private fun foodCard(f: Food, listContext: List<Food> = listOf(f), indexInList: Int = 0): LinearLayout {
+    private fun foodCard(f: Food, listContext: List<Food> = listOf(f), indexInList: Int = 0, backTo: () -> Unit = { showMenu() }): LinearLayout {
         val card = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; background = bg(Color.WHITE, 16); setPadding(dp(10), dp(10), dp(10), dp(10)); layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(9) } }
         // Ảnh món ăn to hơn trước và có thể bấm vào để xem phóng to (chụm/mở
         // 2 ngón tay để zoom, kéo xem chi tiết), giống hệt cách xem banner —
@@ -258,7 +313,11 @@ class MainActivity : SessionActivity() {
         val img = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; background = bg(Color.rgb(255, 245, 240), 14); clipToOutline = true }
         card.addView(img, LinearLayout.LayoutParams(dp(86), dp(86)))
         ImageLoader.load(img, f.image)
-        img.setOnClickListener { openFoodImages(listContext, indexInList) }
+        // Bấm vào ẢNH và bấm vào TÊN/MÔ TẢ (info) đều mở "Chi tiết món" ngay lập
+        // tức — hiện đủ ảnh + thông tin món để bắt đầu tính thời gian xem tích
+        // XU. Muốn xem ảnh phóng to thì bấm vào đúng ảnh lớn NGAY TRONG màn chi
+        // tiết đó (xem showFoodDetail).
+        img.setOnClickListener { push(backTo) { showFoodDetail(f) } }
         val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(11), 0, dp(6), 0) }
         info.addView(label(f.name, 17f, dark, true))
         if (f.description.isNotBlank()) info.addView(label(f.description, 13.5f, secondary))
@@ -288,7 +347,7 @@ class MainActivity : SessionActivity() {
         }
         actionBox.addView(addBtn, LinearLayout.LayoutParams(dp(42), dp(42)).apply { topMargin = dp(2) })
         card.addView(actionBox, LinearLayout.LayoutParams(dp(48), -2))
-        info.setOnClickListener { showFoodDetail(f) }
+        info.setOnClickListener { push(backTo) { showFoodDetail(f) } }
         return card
     }
 
@@ -323,7 +382,7 @@ class MainActivity : SessionActivity() {
         // có khái niệm "khách vãng lai tích XU" — báo rõ và mời đăng nhập.
         if (!account.isLoggedIn()) {
             timer.text = "🔒 Đăng nhập để tích XU khi xem món"
-            c.addView(button("Đăng nhập") { showLogin() }.apply { layoutParams = LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(8) } })
+            c.addView(button("Đăng nhập") { push({ showFoodDetail(f) }) { showLogin() } }.apply { layoutParams = LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(8) } })
         } else {
             timer.text = "⏱ Đang kết nối máy chủ..."
             executor.execute {
@@ -375,7 +434,7 @@ class MainActivity : SessionActivity() {
                     handler.post(runnable)
                 }
             }
-            c.addView(button("🪙 Xem ví XU") { showXu() }.apply { layoutParams = LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(8) } })
+            c.addView(button("🪙 Xem ví XU") { push({ showFoodDetail(f) }) { showXu() } }.apply { layoutParams = LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(8) } })
         }
         c.addView(button(if (f.stock > 0) "🛒 Thêm vào giỏ" else "Hết hàng") {
             if (f.stock <= 0) { toast("Món này đã hết hàng"); return@button }
@@ -458,7 +517,7 @@ class MainActivity : SessionActivity() {
     // =========================================================================
     private fun showCart() {
         val s = shell("Giỏ hàng", 2); setContentView(s); val c = contentOf(s)
-        if (cart.isEmpty()) { c.addView(label("🛒 Giỏ hàng đang trống", 20f, dark, true)); c.addView(button("Xem thực đơn") { showMenu() }); return }
+        if (cart.isEmpty()) { c.addView(label("🛒 Giỏ hàng đang trống", 20f, dark, true)); c.addView(button("Xem thực đơn") { push({ showCart() }) { showMenu() } }); return }
 
         val listBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }; c.addView(listBox)
         val loadingView = loading(listBox, "Đang cập nhật giỏ hàng...")
@@ -480,9 +539,9 @@ class MainActivity : SessionActivity() {
                 stepper.addView(TextView(this).apply { text = "+"; textSize = 18f; setTextColor(primary); setTypeface(null, Typeface.BOLD); setPadding(dp(10), dp(4), dp(10), dp(4)); setOnClickListener { if (qty + 1 > f.stock) { toast("Chỉ còn ${f.stock} phần"); return@setOnClickListener }; cart[id] = qty + 1; saveLocalCart(); refreshCartBadge(); renderCart(foods) } })
                 row.addView(stepper); listBox.addView(row)
             }
-            if (cart.isEmpty()) { listBox.addView(label("🛒 Giỏ hàng đang trống", 18f, dark, true)); listBox.addView(button("Xem thực đơn") { showMenu() }); return }
+            if (cart.isEmpty()) { listBox.addView(label("🛒 Giỏ hàng đang trống", 18f, dark, true)); listBox.addView(button("Xem thực đơn") { push({ showCart() }) { showMenu() } }); return }
             listBox.addView(label("Tổng cộng: ${money(total)}", 20f, primary, true).apply { gravity = Gravity.END; setPadding(0, dp(12), 0, dp(12)) })
-            listBox.addView(button("Đặt hàng — ${money(total)}") { showCheckout() })
+            listBox.addView(button("Đặt hàng — ${money(total)}") { push({ showCart() }) { showCheckout() } })
         }
 
         executor.execute {
@@ -594,7 +653,10 @@ class MainActivity : SessionActivity() {
                                 cart.clear(); saveLocalCart()
                                 val code = cr.optJSONObject("data")?.optJSONObject("order")?.optString("code") ?: ""
                                 toast("Đặt hàng thành công!")
-                                showOrderDetail(code)
+                                // Đơn đã đặt xong nên quay lại (‹) từ màn Chi tiết
+                                // đơn hàng này nên về danh sách Đơn hàng, không
+                                // phải quay lại form Xác nhận đặt hàng vừa xong.
+                                push({ showOrders() }) { showOrderDetail(code) }
                             }
                         }
                     })
@@ -618,7 +680,7 @@ class MainActivity : SessionActivity() {
                 listBox.removeView(loadingView)
                 if (!r.optBoolean("ok")) { listBox.addView(label(r.optString("message", "Không tải được đơn hàng."), 14f, danger)); return@runOnUiThread }
                 val arr = r.optJSONObject("data")?.optJSONArray("orders") ?: JSONArray()
-                if (arr.length() == 0) { listBox.addView(label("📦 Chưa có đơn hàng nào", 20f, dark, true)); listBox.addView(label("Đơn hàng được đồng bộ trực tiếp với tài khoản trên website.", 13f, secondary)); listBox.addView(button("Đặt món ngay") { showMenu() }); return@runOnUiThread }
+                if (arr.length() == 0) { listBox.addView(label("📦 Chưa có đơn hàng nào", 20f, dark, true)); listBox.addView(label("Đơn hàng được đồng bộ trực tiếp với tài khoản trên website.", 13f, secondary)); listBox.addView(button("Đặt món ngay") { push({ showOrders() }) { showMenu() } }); return@runOnUiThread }
                 for (i in 0 until arr.length()) {
                     val o = arr.getJSONObject(i)
                     val payStatus = o.optString("payment_status", "pending")
@@ -629,7 +691,7 @@ class MainActivity : SessionActivity() {
                     row.addView(label("Trạng thái: ${o.optString("status")}", 14f, primary, true), LinearLayout.LayoutParams(0, -2, 1f))
                     row.addView(label(if (payStatus == "paid") "✅ Đã thanh toán" else "💳 Chờ thanh toán", 13f, if (payStatus == "paid") ok else Color.rgb(198, 130, 8)))
                     card.addView(row)
-                    card.setOnClickListener { showOrderDetail(o.optString("code")) }
+                    card.setOnClickListener { push({ showOrders() }) { showOrderDetail(o.optString("code")) } }
                     listBox.addView(card)
                 }
             }
@@ -711,7 +773,7 @@ class MainActivity : SessionActivity() {
                 // ---- MÃ QUAY THƯỞNG ----
                 val luckyCode = o.optString("lucky_code", "")
                 if (confirmed && luckyCode.isNotBlank() && luckyCode != "null") {
-                    box.addView(button("🎁 Dùng mã quay thưởng: $luckyCode") { showLucky(luckyCode) }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) } })
+                    box.addView(button("🎁 Dùng mã quay thưởng: $luckyCode") { push({ showOrderDetail(code) }) { showLucky(luckyCode) } }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) } })
                 }
             }
         }
@@ -747,7 +809,7 @@ class MainActivity : SessionActivity() {
                 }
             }
         }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2) })
-        c.addView(ghostButton("🔢 Số may mắn hằng ngày") { showDaily() }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) } })
+        c.addView(ghostButton("🔢 Số may mắn hằng ngày") { push({ showLucky(prefillCode) }) { showDaily() } }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) } })
     }
 
     // =========================================================================
@@ -857,7 +919,7 @@ class MainActivity : SessionActivity() {
         val favIds = FavoriteStore.ids(this)
         if (favIds.isEmpty()) {
             box.addView(label("Bạn chưa lưu món nào.", 15f, secondary))
-            box.addView(button("🍚 Xem thực đơn") { showMenu() }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) } })
+            box.addView(button("🍚 Xem thực đơn") { push({ showFavorites() }) { showMenu() } }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) } })
             return
         }
         val loadingView = loading(box, "Đang tải món yêu thích...")
@@ -872,7 +934,7 @@ class MainActivity : SessionActivity() {
                     if (favIds.contains(f.optInt("id"))) foods.add(Food(f.optInt("id"), f.optString("name"), f.optInt("price"), f.optInt("stock"), f.optString("category"), f.optString("description"), f.optString("image")))
                 }
                 if (foods.isEmpty()) box.addView(label("Các món đã lưu có thể đã ngừng bán.", 14f, secondary))
-                else foods.forEachIndexed { idx, food -> box.addView(foodCard(food, foods, idx)) }
+                else foods.forEachIndexed { idx, food -> box.addView(foodCard(food, foods, idx, backTo = { showFavorites() })) }
             }
         }
     }
@@ -882,7 +944,7 @@ class MainActivity : SessionActivity() {
     // =========================================================================
     private fun showProfile() {
         val s = shell("Tài khoản", 4); setContentView(s); val c = contentOf(s)
-        if (!account.isLoggedIn()) { c.addView(label("👤 Tài khoản khách hàng", 22f, dark, true)); c.addView(label("Đăng nhập để đồng bộ tài khoản với tài khoản COM11H đang dùng trên website.")); c.addView(button("🔐 Đăng nhập / Đăng ký") { showLogin() }); return }
+        if (!account.isLoggedIn()) { c.addView(label("👤 Tài khoản khách hàng", 22f, dark, true)); c.addView(label("Đăng nhập để đồng bộ tài khoản với tài khoản COM11H đang dùng trên website.")); c.addView(button("🔐 Đăng nhập / Đăng ký") { push({ showProfile() }) { showLogin() } }); return }
         c.addView(label("👤 Tài khoản khách hàng", 22f, dark, true)); val loadingView = label("Đang đồng bộ thông tin tài khoản...", 15f, secondary); c.addView(loadingView)
         executor.execute {
             try {
@@ -905,17 +967,17 @@ class MainActivity : SessionActivity() {
 
                         val grid = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL }
                         c.addView(grid, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
-                        grid.addView(ghostButton("▤ Đơn hàng của tôi") { showOrders() }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) } })
-                        grid.addView(ghostButton("⭐ Điểm tích luỹ & hạng thành viên") { showLoyalty() }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) } })
-                        grid.addView(ghostButton("❤️ Món yêu thích") { showFavorites() }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) } })
-                        grid.addView(ghostButton("🪙 Ví XU & ưu đãi") { showXu() }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) } })
-                        grid.addView(ghostButton("🎁 Quay số trúng thưởng") { showLucky(null) }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) } })
-                        grid.addView(ghostButton("🔢 Số may mắn hằng ngày") { showDaily() }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) } })
+                        grid.addView(ghostButton("▤ Đơn hàng của tôi") { push({ showProfile() }) { showOrders() } }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) } })
+                        grid.addView(ghostButton("⭐ Điểm tích luỹ & hạng thành viên") { push({ showProfile() }) { showLoyalty() } }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) } })
+                        grid.addView(ghostButton("❤️ Món yêu thích") { push({ showProfile() }) { showFavorites() } }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) } })
+                        grid.addView(ghostButton("🪙 Ví XU & ưu đãi") { push({ showProfile() }) { showXu() } }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) } })
+                        grid.addView(ghostButton("🎁 Quay số trúng thưởng") { push({ showProfile() }) { showLucky(null) } }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) } })
+                        grid.addView(ghostButton("🔢 Số may mắn hằng ngày") { push({ showProfile() }) { showDaily() } }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) } })
 
                         c.addView(button("🔄 Đồng bộ lại") { showProfile() }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) } })
                         c.addView(button("🚪 Đăng xuất") { account.logout(); showProfile() }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) } })
                     } else {
-                        account.logout(); c.addView(label(r.optString("message", "Phiên đăng nhập đã hết hạn."))); c.addView(button("Đăng nhập lại") { showLogin() })
+                        account.logout(); c.addView(label(r.optString("message", "Phiên đăng nhập đã hết hạn."))); c.addView(button("Đăng nhập lại") { push({ showProfile() }) { showLogin() } })
                     }
                 }
             } catch (_: Exception) { runOnUiThread { loadingView.text = "Không thể đồng bộ tài khoản. Kiểm tra mạng rồi thử lại."; c.addView(button("Thử lại") { showProfile() }) } }
@@ -927,8 +989,8 @@ class MainActivity : SessionActivity() {
     private fun showLogin() {
         val s = shell("Đăng nhập", 4); setContentView(s); val c = contentOf(s); val phone = input("Số điện thoại"); val pass = input("Mật khẩu", true); c.addView(phone); c.addView(pass)
         c.addView(button("Đăng nhập") { val p = phone.text.toString().trim(); val pw = pass.text.toString(); if (p.isBlank() || pw.isBlank()) { toast("Vui lòng nhập đầy đủ thông tin"); return@button }; executor.execute { try { val r = account.request("login", "POST", JSONObject(mapOf("phone" to p, "password" to pw, "device" to "COM11H Android")).toString()); runOnUiThread { if (r.optBoolean("ok")) { account.saveToken(r.optJSONObject("data")?.optString("token", "") ?: ""); toast("Đăng nhập thành công"); showProfile() } else toast(r.optString("message", "Đăng nhập thất bại")) } } catch (_: Exception) { runOnUiThread { toast("Không kết nối được máy chủ tài khoản") } } } })
-        c.addView(ghostButton("Quên mật khẩu?") { showForgotPasswordPhone() }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) } })
-        c.addView(button("Đăng ký tài khoản mới") { showRegister() }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) } })
+        c.addView(ghostButton("Quên mật khẩu?") { push({ showLogin() }) { showForgotPasswordPhone() } }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) } })
+        c.addView(button("Đăng ký tài khoản mới") { push({ showLogin() }) { showRegister() } }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) } })
     }
 
     // =========================================================================
@@ -952,7 +1014,7 @@ class MainActivity : SessionActivity() {
                 } catch (_: Exception) { runOnUiThread { toast("Không kết nối được máy chủ tài khoản") } }
             }
         }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) } })
-        c.addView(button("Đăng nhập") { showLogin() }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) } })
+        c.addView(button("Đăng nhập") { push({ showRegister() }) { showLogin() } }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) } })
     }
 
     // =========================================================================
@@ -976,13 +1038,13 @@ class MainActivity : SessionActivity() {
                 try {
                     val r = account.request("password_reset_request", "POST", JSONObject(mapOf("name" to n, "phone" to p)).toString())
                     runOnUiThread {
-                        if (r.optBoolean("ok")) { showForgotPasswordSent(r.optString("message", "Đã gửi yêu cầu khôi phục.")) }
+                        if (r.optBoolean("ok")) { push({ showForgotPasswordPhone() }) { showForgotPasswordSent(r.optString("message", "Đã gửi yêu cầu khôi phục.")) } }
                         else toast(r.optString("message", "Không gửi được yêu cầu"))
                     }
                 } catch (_: Exception) { runOnUiThread { toast("Không kết nối được máy chủ tài khoản") } }
             }
         }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) } })
-        c.addView(button("Quay lại đăng nhập") { showLogin() }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) } })
+        c.addView(button("Quay lại đăng nhập") { push({ showForgotPasswordPhone() }) { showLogin() } }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) } })
     }
 
     /** Màn hình xác nhận sau khi gửi yêu cầu quên mật khẩu thành công. */
@@ -990,6 +1052,6 @@ class MainActivity : SessionActivity() {
         val s = shell("Quên mật khẩu", 4); setContentView(s); val c = contentOf(s)
         c.addView(label(message, 14f, secondary))
         c.addView(label("Mật khẩu mới sẽ được gửi qua SMS từ số 0922 60 62 68 (COM11H). Vui lòng chú ý điện thoại.", 13.5f, secondary).apply { setPadding(0, dp(6), 0, 0) })
-        c.addView(button("Quay lại đăng nhập") { showLogin() }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) } })
+        c.addView(button("Quay lại đăng nhập") { push({ showForgotPasswordSent(message) }) { showLogin() } }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) } })
     }
 }
