@@ -566,19 +566,31 @@ class MainActivity : SessionActivity() {
         val s = shell("Xác nhận đặt hàng", 2); setContentView(s); val c = contentOf(s)
         c.addView(label("Thông tin giao hàng", 18f, dark, true))
 
-        // Thông báo về khoảng cách giao hàng — nhắc khách ghi rõ, đầy đủ địa chỉ
-        // (số nhà, đường, phường/xã, quận/huyện...) để hệ thống xác định đúng
-        // khoảng cách. Nếu địa chỉ vượt quá phạm vi giao hàng của quán, hệ
-        // thống sẽ báo rõ lý do ở bước "Xem lại tổng tiền" bên dưới và không
-        // cho đặt hàng tiếp.
-        val noticeBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = bg(Color.rgb(255, 244, 230), 12); setPadding(dp(12), dp(10), dp(12), dp(10)) }
+        val noticeBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = bg(Color.rgb(255, 244, 230), 12)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+        }
         noticeBox.addView(label("🚴 Lưu ý khoảng cách giao hàng", 14f, Color.rgb(180, 95, 6), true))
-        noticeBox.addView(label("Vui lòng ghi rõ, đầy đủ địa chỉ (số nhà, đường, phường/xã, tỉnh/thành) để hệ thống xác nhận chính xác khoảng cách giao hàng. Quán chỉ giao hàng trong bán kính ${String.format("%.0f", DistanceHelper.MAX_DELIVERY_KM)}km từ ${DistanceHelper.STORE_ADDRESS.substringBefore(",")} — nếu địa chỉ vượt quá phạm vi này, đơn hàng sẽ không đặt được.", 12.5f, Color.rgb(120, 76, 20)).apply { setPadding(0, dp(3), 0, 0) })
+        noticeBox.addView(label(
+            "Phí vận chuyển được tính từ trung tâm KCN. Đơn từ 200.000đ và trong phạm vi 5km được FREE SHIP. Vui lòng ghi rõ số nhà, đường, phường/xã, tỉnh/thành để hệ thống xác định chính xác khoảng cách.",
+            12.5f, Color.rgb(120, 76, 20)
+        ).apply { setPadding(0, dp(3), 0, 0) })
         c.addView(noticeBox, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8); bottomMargin = dp(10) })
 
-        val address = EditText(this).apply { hint = "Địa chỉ giao hàng (số nhà, đường, phường/xã...)"; setText(lastAddress()); textSize = 15f; setPadding(dp(12), dp(10), dp(12), dp(10)); background = bg(Color.WHITE, 12) }
-        val time = EditText(this).apply { hint = "Giờ giao hàng mong muốn (bắt buộc)"; textSize = 15f; setPadding(dp(12), dp(10), dp(12), dp(10)); background = bg(Color.WHITE, 12) }
-        val note = EditText(this).apply { hint = "Ghi chú cho quán (không bắt buộc)"; textSize = 15f; setPadding(dp(12), dp(10), dp(12), dp(10)); background = bg(Color.WHITE, 12) }
+        val address = EditText(this).apply {
+            hint = "Địa chỉ giao hàng (số nhà, đường, phường/xã...)"
+            setText(lastAddress()); textSize = 15f
+            setPadding(dp(12), dp(10), dp(12), dp(10)); background = bg(Color.WHITE, 12)
+        }
+        val time = EditText(this).apply {
+            hint = "Giờ giao hàng mong muốn (bắt buộc)"; textSize = 15f
+            setPadding(dp(12), dp(10), dp(12), dp(10)); background = bg(Color.WHITE, 12)
+        }
+        val note = EditText(this).apply {
+            hint = "Ghi chú cho quán (không bắt buộc)"; textSize = 15f
+            setPadding(dp(12), dp(10), dp(12), dp(10)); background = bg(Color.WHITE, 12)
+        }
         listOf(address, time, note).forEach { c.addView(it, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) }) }
 
         val summaryBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -592,74 +604,152 @@ class MainActivity : SessionActivity() {
 
         val previewBtn = button("Xem lại tổng tiền") {
             if (address.text.toString().trim().isBlank()) { toast("Vui lòng nhập địa chỉ giao hàng"); return@button }
-            // Giờ giao hàng là bắt buộc: chặn ngay tại bước xem lại tổng tiền
-            // nếu khách chưa nhập, không để trống mặc định "giao ngay" nữa.
             if (time.text.toString().trim().isBlank()) { toast("Vui lòng nhập giờ giao hàng"); return@button }
-            summaryBox.removeAllViews(); val loadingView = loading(summaryBox, "Đang kiểm tra đơn hàng & khoảng cách giao hàng...")
+
+            summaryBox.removeAllViews()
+            val loadingView = loading(summaryBox, "Đang kiểm tra đơn hàng, XU & phí giao hàng...")
             executor.execute {
-                val body = JSONObject().put("address", address.text.toString().trim()).put("kcn_id", KcnStore.id(this)).put("items", itemsJson()).toString()
+                val body = JSONObject()
+                    .put("address", address.text.toString().trim())
+                    .put("kcn_id", KcnStore.id(this))
+                    .put("items", itemsJson())
+                    .toString()
                 val r = account.request("order_preview", "POST", body)
-                val data0 = r.optJSONObject("data") ?: JSONObject()
-                // Nếu server chưa tự tính khoảng cách (chưa có distance_km),
-                // app tự geocode địa chỉ quán + địa chỉ khách để tính khoảng
-                // cách dự phòng, áp giới hạn giao hàng DistanceHelper.MAX_DELIVERY_KM.
-                var clientDistance: Double? = null
-                var clientDistanceFailed = false
-                if (r.optBoolean("ok") && !data0.has("distance_km")) {
-                    clientDistance = DistanceHelper.distanceFromStoreKm(address.text.toString().trim())
-                    clientDistanceFailed = clientDistance == null
-                }
+                val data = r.optJSONObject("data") ?: JSONObject()
                 runOnUiThread {
                     summaryBox.removeView(loadingView)
-                    if (!r.optBoolean("ok")) { summaryBox.addView(label(r.optString("message", "Không thể tính đơn hàng."), 14f, danger)); return@runOnUiThread }
-                    val data = data0
-                    val total = data.optInt("total")
-                    // Ưu tiên khoảng cách do server tính (distance_km /
-                    // max_distance_km) nếu có; nếu không thì dùng khoảng cách
-                    // ước lượng tính ngay trên app (DistanceHelper) so với
-                    // giới hạn giao hàng tối đa 15km.
-                    var outOfRange = false
-                    if (data.has("distance_km")) {
-                        val distance = data.optDouble("distance_km")
-                        val maxDistance = if (data.has("max_distance_km")) data.optDouble("max_distance_km") else DistanceHelper.MAX_DELIVERY_KM
-                        outOfRange = distance > maxDistance
-                        val distText = "📍 Khoảng cách giao hàng: ${String.format("%.1f", distance)} km (tối đa ${String.format("%.1f", maxDistance)} km)"
-                        summaryBox.addView(label(distText, 13.5f, if (outOfRange) danger else ok, true))
-                    } else if (clientDistance != null) {
-                        val distance = clientDistance
-                        outOfRange = distance > DistanceHelper.MAX_DELIVERY_KM
-                        val distText = "📍 Khoảng cách giao hàng (ước tính): ${String.format("%.1f", distance)} km (tối đa ${String.format("%.1f", DistanceHelper.MAX_DELIVERY_KM)} km)"
-                        summaryBox.addView(label(distText, 13.5f, if (outOfRange) danger else ok, true))
-                    } else if (clientDistanceFailed) {
-                        summaryBox.addView(label("⚠️ Không thể xác định chính xác khoảng cách từ địa chỉ này. Vui lòng ghi rõ số nhà, tên đường, phường/xã, tỉnh/thành để hệ thống xác nhận đúng khoảng cách giao hàng.", 12.5f, Color.rgb(180, 95, 6)))
-                    }
-                    if (outOfRange) {
-                        summaryBox.addView(label("❌ Địa chỉ này cách quán quá ${String.format("%.0f", DistanceHelper.MAX_DELIVERY_KM)}km, nằm ngoài phạm vi giao hàng. Vui lòng kiểm tra lại địa chỉ hoặc chọn địa chỉ gần hơn.", 13.5f, danger).apply { setPadding(0, dp(4), 0, dp(4)) })
+                    if (!r.optBoolean("ok")) {
+                        summaryBox.addView(label(r.optString("message", "Không thể tính đơn hàng."), 14f, danger))
                         return@runOnUiThread
                     }
-                    summaryBox.addView(label("Tổng tiền: ${money(total)}", 19f, primary, true))
+
+                    val subtotal = data.optInt("subtotal", data.optInt("total"))
+                    val shipping = data.optJSONObject("shipping") ?: JSONObject()
+                    val distance = shipping.optDouble("distance_km", Double.NaN)
+                    val shippingFee = shipping.optInt("fee", shipping.optInt("normal_fee", 0))
+                    val shipperFee = shipping.optInt("shipper_fee", 0)
+                    val freeShipping = shipping.optBoolean("free", shipping.optBoolean("free_shipping", false))
+                    val kcnName = shipping.optString("kcn_name", KcnStore.name(this))
+                    val centerAddress = shipping.optString("center_address", "")
+                    val distanceSource = shipping.optString("distance_source", "road")
+
+                    if (!distance.isNaN()) {
+                        val distanceText = if (distanceSource == "road") "📍 Khoảng cách đường đi" else "📍 Khoảng cách ước tính"
+                        summaryBox.addView(label(
+                            "$distanceText: ${String.format("%.1f", distance)} km",
+                            14f, ok, true
+                        ))
+                    }
+                    if (kcnName.isNotBlank()) summaryBox.addView(label("🏭 $kcnName", 13f, secondary))
+                    if (centerAddress.isNotBlank()) summaryBox.addView(label("Tính từ: $centerAddress", 12f, secondary))
+
+                    summaryBox.addView(label("Tiền món: ${money(subtotal)}", 17f, dark, true))
+                    summaryBox.addView(label(
+                        if (freeShipping) "🚚 Phí vận chuyển: FREE SHIP" else "🚚 Phí vận chuyển: ${money(shippingFee)}",
+                        16f, if (freeShipping) ok else dark, true
+                    ))
+                    if (shipperFee > 0) {
+                        // Chỉ hiển thị phí khách; tiền shipper là dữ liệu nội bộ và
+                        // không nên để lộ cho khách hàng.
+                    }
+
+                    val xu = data.optJSONObject("xu") ?: JSONObject()
+                    val xuBalance = xu.optInt("balance", 0)
+                    val maxXu = xu.optInt("max_discount", minOf(xuBalance, subtotal))
+                    val xuRate = xu.optInt("rate", 1).coerceAtLeast(1)
+                    val xuExpires = xu.optString("expires_at", "")
+
+                    val xuBox = LinearLayout(this).apply {
+                        orientation = LinearLayout.VERTICAL
+                        background = bg(Color.rgb(255, 250, 230), 12)
+                        setPadding(dp(12), dp(10), dp(12), dp(10))
+                        layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
+                            topMargin = dp(10); bottomMargin = dp(8)
+                        }
+                    }
+                    xuBox.addView(label("🪙 Sử dụng XU để giảm tiền", 15f, Color.rgb(160, 105, 0), true))
+                    xuBox.addView(label(
+                        "Số dư: ${xuBalance} XU • 1 XU = ${xuRate}đ. Tối đa dùng: ${maxXu} XU",
+                        13f, secondary
+                    ))
+                    if (xuExpires.isNotBlank()) {
+                        xuBox.addView(label("Hạn sử dụng số XU hiện có: $xuExpires", 12f, Color.rgb(160, 105, 0)))
+                    }
+
+                    val xuRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                    val useXu = CheckBox(this).apply { text = "Dùng XU"; textSize = 14f; isEnabled = maxXu > 0 }
+                    val xuInput = EditText(this).apply {
+                        hint = "0"; inputType = android.text.InputType.TYPE_CLASS_NUMBER
+                        textSize = 15f; setSingleLine(true); setPadding(dp(10), dp(6), dp(10), dp(6)); background = bg(Color.WHITE, 10)
+                        isEnabled = false
+                    }
+                    val maxBtn = button("Dùng tối đa") {
+                        if (maxXu > 0) { useXu.isChecked = true; xuInput.isEnabled = true; xuInput.setText(maxXu.toString()) }
+                    }
+                    xuRow.addView(useXu, LinearLayout.LayoutParams(0, -2, 0.8f))
+                    xuRow.addView(xuInput, LinearLayout.LayoutParams(dp(100), -2).apply { marginEnd = dp(6) })
+                    xuRow.addView(maxBtn, LinearLayout.LayoutParams(dp(105), -2))
+                    xuBox.addView(xuRow)
+                    summaryBox.addView(xuBox)
+
+                    val discountLabel = label("Giảm bằng XU: 0đ", 15f, primary, true)
+                    val payableLabel = label("CẦN THANH TOÁN: ${money(subtotal + shippingFee)}", 21f, primary, true).apply {
+                        setPadding(0, dp(8), 0, dp(8)); gravity = Gravity.END
+                    }
+                    summaryBox.addView(discountLabel)
+                    summaryBox.addView(payableLabel)
+
+                    fun selectedXu(): Int {
+                        if (!useXu.isChecked) return 0
+                        val raw = xuInput.text.toString().trim().toIntOrNull() ?: 0
+                        return raw.coerceIn(0, maxXu)
+                    }
+                    fun refreshPayable() {
+                        val xuUse = selectedXu()
+                        val discount = xuUse * xuRate
+                        discountLabel.text = "Giảm bằng XU: -${money(discount)}"
+                        payableLabel.text = "CẦN THANH TOÁN: ${money(maxOf(0, subtotal + shippingFee - discount))}"
+                    }
+                    useXu.setOnCheckedChangeListener { _, checked ->
+                        xuInput.isEnabled = checked && maxXu > 0
+                        if (!checked) xuInput.setText("0")
+                        refreshPayable()
+                    }
+                    xuInput.addTextChangedListener(object : android.text.TextWatcher {
+                        override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                        override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { refreshPayable() }
+                        override fun afterTextChanged(s: android.text.Editable?) = Unit
+                    })
+
                     summaryBox.addView(button("✅ Đặt hàng ngay") {
                         if (time.text.toString().trim().isBlank()) { toast("Vui lòng nhập giờ giao hàng"); return@button }
+                        val xuUse = selectedXu()
+                        if (xuUse > maxXu) { toast("Số XU sử dụng vượt quá số dư cho phép"); return@button }
+
                         summaryBox.addView(label("⏳ Đang tạo đơn hàng...", 14f, secondary))
                         val idem = UUID.randomUUID().toString()
-                        val orderBody = JSONObject().put("address", address.text.toString().trim())
-                            .put("delivery_time", time.text.toString().trim()).put("note", note.text.toString().trim())
-                            .put("items", itemsJson()).toString()
+                        val orderBody = JSONObject()
+                            .put("address", address.text.toString().trim())
+                            .put("delivery_time", time.text.toString().trim())
+                            .put("note", note.text.toString().trim())
+                            .put("items", itemsJson())
+                            .put("xu_use", xuUse)
+                            .toString()
                         executor.execute {
                             val cr = account.request("create_order", "POST", orderBody, mapOf("X-Idempotency-Key" to idem))
                             runOnUiThread {
-                                if (!cr.optBoolean("ok")) { toast(cr.optString("message", "Đặt hàng thất bại")); return@runOnUiThread }
+                                if (!cr.optBoolean("ok")) {
+                                    toast(cr.optString("message", "Đặt hàng thất bại"))
+                                    return@runOnUiThread
+                                }
                                 saveLastAddress(address.text.toString().trim())
                                 cart.clear(); saveLocalCart()
                                 val code = cr.optJSONObject("data")?.optJSONObject("order")?.optString("code") ?: ""
                                 toast("Đặt hàng thành công!")
-                                // Đơn đã đặt xong nên quay lại (‹) từ màn Chi tiết
-                                // đơn hàng này nên về danh sách Đơn hàng, không
-                                // phải quay lại form Xác nhận đặt hàng vừa xong.
                                 push({ showOrders() }) { showOrderDetail(code) }
                             }
                         }
-                    })
+                    }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) } })
                 }
             }
         }
