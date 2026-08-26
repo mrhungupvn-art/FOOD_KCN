@@ -223,8 +223,8 @@ class HomeActivity : SessionActivity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(8), dp(8), dp(14), dp(8))
             background = GradientDrawable().apply {
-                setColor(Color.WHITE); cornerRadius = dp(30).toFloat()
-                setStroke(dp(1), Color.rgb(255, 202, 128))
+                setColor(Color.rgb(255, 128, 0)); cornerRadius = dp(30).toFloat()
+                setStroke(dp(1), Color.rgb(230, 100, 0))
             }
             elevation = dp(7).toFloat()
             isClickable = true; isFocusable = true
@@ -236,8 +236,8 @@ class HomeActivity : SessionActivity() {
         }
         bubble.addView(coin, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginEnd = dp(8) })
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        col.addView(TextView(this).apply { text = "Xem món nhận Xu"; textSize = 12.5f; setTypeface(null, Typeface.BOLD); setTextColor(this@HomeActivity.text) })
-        col.addView(TextView(this).apply { text = "Xem 30s +10 Xu"; textSize = 10f; setTextColor(secondary) })
+        col.addView(TextView(this).apply { text = "Xem món nhận Xu"; textSize = 12.5f; setTypeface(null, Typeface.BOLD); setTextColor(Color.WHITE) })
+        col.addView(TextView(this).apply { text = "Xem 30s +10 Xu"; textSize = 10f; setTextColor(Color.WHITE) })
         bubble.addView(col)
 
         // Nhấp nháy phóng to/thu nhỏ nhẹ ở icon xu để thu hút sự chú ý, không
