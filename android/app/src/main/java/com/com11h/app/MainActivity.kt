@@ -23,10 +23,7 @@ import java.util.concurrent.Executors
  */
 class MainActivity : SessionActivity() {
     private lateinit var account: AccountSync
-    // Gọi đúng bộ action xu_* thật trên server (chống gian lận: server tự
-    // tính thời gian xem, tự khoá theo giờ/ngày) — thay cho XuStore cũ (chỉ
-    // lưu tạm trên máy, không đồng bộ với web).
-    private val xuApi by lazy { XuApi(account) }
+    private lateinit var xuApi: XuApi
     private val executor = Executors.newSingleThreadExecutor()
     private val handler = Handler(Looper.getMainLooper())
     private val primary = Color.rgb(245, 81, 30)
@@ -93,7 +90,7 @@ class MainActivity : SessionActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState); account = AccountSync(this); loadLocalCart()
+        super.onCreate(savedInstanceState); account = AccountSync(this); xuApi = XuApi(account); loadLocalCart()
         val code = intent.getStringExtra("code")
         when (intent.getStringExtra("screen")) {
             "menu" -> showMenu()
@@ -296,9 +293,13 @@ class MainActivity : SessionActivity() {
     }
 
     // =========================================================================
-    // CHI TIẾT MÓN + TÍCH XU: xem đủ thời gian quy định -> cộng XU THẬT trên
-    // server (xu_start_view/xu_complete_view — chống gian lận: server tự tính
-    // giờ bắt đầu/kết thúc, tự khoá theo giờ/ngày, không tin thời gian app gửi).
+    // CHI TIẾT MÓN + TÍCH XU: đủ 30 giây xem một món -> +10 XU, cộng THẬT vào
+    // ví XU trên server (bảng xu_wallets, qua api action 'xu_start_view' rồi
+    // 'xu_complete_view' — xem XuApi.kt / core.php / api/index.php). Trước đây
+    // màn này chỉ cộng XU vào bộ nhớ tạm trên máy (XuStore, bản demo) nên xem
+    // đủ giờ mà tài khoản khách KHÔNG nhận được XU thật — đã sửa để gọi đúng
+    // 2 action trên server, đồng thời báo rõ "Bạn đã nhận được N XU vào tài
+    // khoản" khi server xác nhận cộng XU thành công.
     // Bấm vào tên/mô tả món trong Thực đơn (info) để mở màn này; bấm vào ẢNH
     // vẫn mở xem ảnh phóng to (openFoodImages) như trước, không đổi hành vi đó.
     // =========================================================================
@@ -314,52 +315,67 @@ class MainActivity : SessionActivity() {
 
         val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = bg(Color.rgb(255,250,236),16); setPadding(dp(14),dp(12),dp(14),dp(12)) }
         info.addView(label("🪙 XU khi xem món", 17f, dark, true))
-        info.addView(label("Xem đủ thời gian quy định: được cộng XU. Xem đủ 10 món khác nhau trong ngày: thưởng thêm. Có giới hạn XU/giờ và XU/ngày (server tự kiểm soát).", 13f, secondary))
-        val timer = label(if (account.isLoggedIn()) "⏱ Đang kết nối máy chủ XU..." else "Đăng nhập để tích XU khi xem món này", 14f, primary, true); info.addView(timer)
+        info.addView(label("Xem đủ 30 giây: +10 XU. Xem đủ 10 món: thưởng thêm 100 XU. Tối đa 200 XU/giờ và 2.000 XU/ngày.", 13f, secondary))
+        val timer = label("⏱ Đang tính thời gian xem: 30 giây", 14f, primary, true); info.addView(timer)
         c.addView(info, LinearLayout.LayoutParams(-1,-2).apply { bottomMargin = dp(12) })
 
-        if (account.isLoggedIn()) {
+        // Cần đăng nhập vì XU gắn với tài khoản (customer_id) trên server, không
+        // có khái niệm "khách vãng lai tích XU" — báo rõ và mời đăng nhập.
+        if (!account.isLoggedIn()) {
+            timer.text = "🔒 Đăng nhập để tích XU khi xem món"
+            c.addView(button("Đăng nhập") { showLogin() }.apply { layoutParams = LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(8) } })
+        } else {
+            timer.text = "⏱ Đang kết nối máy chủ..."
             executor.execute {
-                val startResp = try { xuApi.startView(f.id) } catch (_: Exception) { null }
+                val startResult = try { xuApi.startView(f.id) } catch (_: Exception) { null }
                 runOnUiThread {
-                    if (isFinishing || isDestroyed) return@runOnUiThread
-                    if (startResp == null || !startResp.optBoolean("ok")) {
-                        timer.text = startResp?.optString("message")?.takeIf { it.isNotBlank() } ?: "Không kết nối được máy chủ XU."
+                    val ok = startResult?.optBoolean("ok") == true
+                    if (!ok) {
+                        timer.text = "⚠️ " + (startResult?.optString("message")?.takeIf { it.isNotBlank() } ?: "Không kết nối được máy chủ XU, vui lòng thử lại.")
                         return@runOnUiThread
                     }
-                    val data = startResp.optJSONObject("data") ?: JSONObject()
-                    val viewId = data.optInt("view_id")
-                    val requiredSeconds = data.optInt("required_seconds", 30).coerceAtLeast(1)
+                    val data = startResult!!.optJSONObject("data")
+                    val viewId = data?.optInt("view_id") ?: 0
+                    val requiredSeconds = data?.optInt("required_seconds")?.takeIf { it > 0 } ?: 30
+                    if (viewId <= 0) { timer.text = "⚠️ Không thể bắt đầu phiên xem XU."; return@runOnUiThread }
+
                     val started = System.currentTimeMillis()
+                    var finished = false
                     val runnable = object : Runnable {
                         override fun run() {
-                            if (isFinishing || isDestroyed) return
+                            if (finished) return
                             val elapsed = ((System.currentTimeMillis() - started) / 1000).toInt()
                             if (elapsed >= requiredSeconds) {
+                                finished = true
                                 timer.text = "⏳ Đang ghi nhận XU..."
                                 executor.execute {
-                                    val completeResp = try { xuApi.completeView(viewId) } catch (_: Exception) { null }
+                                    val completeResult = try { xuApi.completeView(viewId) } catch (_: Exception) { null }
                                     runOnUiThread {
-                                        if (isFinishing || isDestroyed) return@runOnUiThread
-                                        val cdata = completeResp?.optJSONObject("data")
-                                        timer.text = when {
-                                            completeResp?.optBoolean("ok") != true -> completeResp?.optString("message")?.takeIf { it.isNotBlank() } ?: "Không ghi nhận được XU."
-                                            cdata?.optBoolean("already_rewarded") == true -> "✓ Bạn đã nhận XU từ món này"
-                                            (cdata?.optInt("earned") ?: 0) > 0 -> "🎉 +${cdata?.optInt("earned")} XU!"
-                                            else -> "⚠️ Đã đạt giới hạn XU hôm nay/giờ này"
+                                        val cOk = completeResult?.optBoolean("ok") == true
+                                        val cData = completeResult?.optJSONObject("data")
+                                        when {
+                                            cOk && cData?.optBoolean("already_rewarded") == true ->
+                                                timer.text = "✓ Bạn đã nhận XU từ món này trước đó."
+                                            cOk && (cData?.optInt("earned") ?: 0) > 0 -> {
+                                                val earned = cData!!.optInt("earned")
+                                                timer.text = "🎉 Bạn đã nhận được $earned xu vào tài khoản!"
+                                                toast("🎉 Bạn đã nhận được $earned xu vào tài khoản!")
+                                            }
+                                            cOk -> timer.text = "⚠️ Đã đạt giới hạn XU hôm nay/giờ này."
+                                            else -> timer.text = "⚠️ " + (completeResult?.optString("message")?.takeIf { it.isNotBlank() } ?: "Không thể ghi nhận XU lúc này, vui lòng thử lại.")
                                         }
                                     }
                                 }
                                 return
                             }
-                            timer.text = "⏱ Còn ${requiredSeconds - elapsed} giây để nhận XU"
+                            timer.text = "⏱ Còn ${requiredSeconds - elapsed} giây để nhận 10 XU"
                             handler.postDelayed(this, 1000)
                         }
                     }
                     handler.post(runnable)
-                    c.addView(button("🪙 Xem ví XU") { showXu() }.apply { layoutParams = LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(8) } })
                 }
             }
+            c.addView(button("🪙 Xem ví XU") { showXu() }.apply { layoutParams = LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(8) } })
         }
         c.addView(button(if (f.stock > 0) "🛒 Thêm vào giỏ" else "Hết hàng") {
             if (f.stock <= 0) { toast("Món này đã hết hàng"); return@button }
@@ -369,63 +385,68 @@ class MainActivity : SessionActivity() {
     }
 
     // =========================================================================
-    // VÍ XU — số dư, giới hạn giờ/ngày, và danh sách đổi thưởng ĐỀU lấy trực
-    // tiếp từ server (xu_wallet/xu_rewards/xu_redeem), đồng bộ hoàn toàn với
-    // web/admin — không còn dùng XuStore (bản test cục bộ trên máy) nữa.
+    // VÍ XU — lấy số dư THẬT từ server (api action 'xu_wallet'), không còn
+    // đọc bộ nhớ tạm trên máy (XuStore) nữa, để luôn khớp với XU khách vừa
+    // tích được ở màn "Chi tiết món" (showFoodDetail) và với web/admin.
+    // Đổi thưởng cũng gọi thẳng server ('xu_rewards' / 'xu_redeem').
     // =========================================================================
     private fun showXu() {
         if (!account.isLoggedIn()) { toast("Vui lòng đăng nhập để sử dụng XU"); showLogin(); return }
-        val s = shell("Ví XU", 4); setContentView(s); val c = contentOf(s)
-        c.addView(label("🪙 Ví XU", 24f, dark, true))
+        val s=shell("Ví XU",4); setContentView(s); val c=contentOf(s)
+        c.addView(label("🪙 Ví XU",24f,dark,true))
         val loadingView = loading(c, "Đang tải ví XU...")
+
         executor.execute {
-            val walletResp = try { account.request("xu_wallet") } catch (_: Exception) { null }
-            val rewardsResp = try { account.request("xu_rewards") } catch (_: Exception) { null }
+            val walletResult = try { xuApi.wallet() } catch (_: Exception) { null }
+            val rewardsResult = try { xuApi.rewards() } catch (_: Exception) { null }
             runOnUiThread {
-                if (isFinishing || isDestroyed) return@runOnUiThread
                 c.removeView(loadingView)
-                if (walletResp == null || !walletResp.optBoolean("ok")) {
-                    c.addView(label(walletResp?.optString("message")?.takeIf { it.isNotBlank() } ?: "Không tải được ví XU, thử lại sau.", 14f, secondary))
+                val walletOk = walletResult?.optBoolean("ok") == true
+                if (!walletOk) {
+                    c.addView(label("⚠️ " + (walletResult?.optString("message")?.takeIf { it.isNotBlank() } ?: "Không tải được ví XU, vui lòng thử lại."), 14f, danger))
+                    c.addView(button("Tải lại") { showXu() }.apply { layoutParams = LinearLayout.LayoutParams(-1,-2).apply { topMargin = dp(8) } })
                     return@runOnUiThread
                 }
-                val data = walletResp.optJSONObject("data") ?: JSONObject()
+                val data = walletResult!!.optJSONObject("data") ?: JSONObject()
                 val wallet = data.optJSONObject("wallet") ?: JSONObject()
                 val today = data.optJSONObject("today") ?: JSONObject()
                 val thisHour = data.optJSONObject("this_hour") ?: JSONObject()
-                val settings = data.optJSONObject("settings") ?: JSONObject()
+                val balance = wallet.optInt("balance", 0)
 
-                val card = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = bg(Color.WHITE, 18); setPadding(dp(16), dp(16), dp(16), dp(16)) }
-                card.addView(label("${String.format("%,d", wallet.optInt("balance"))} XU", 30f, primary, true))
-                card.addView(label("Hôm nay: ${today.optInt("earned")}/${today.optInt("limit")} XU", 14f, secondary))
-                card.addView(label("Giờ này: ${thisHour.optInt("earned")}/${thisHour.optInt("limit")} XU", 14f, secondary))
-                if (wallet.optString("status") != "active") card.addView(label("⚠️ Ví XU của bạn đang bị tạm khoá.", 13f, Color.rgb(220, 38, 38), true))
-                c.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
+                val card=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;background=bg(Color.WHITE,18);setPadding(dp(16),dp(16),dp(16),dp(16))}
+                card.addView(label("${String.format("%,d",balance)} XU",30f,primary,true))
+                card.addView(label("Hôm nay: ${today.optInt("earned",0)}/${today.optInt("limit",2000)} XU",14f,secondary))
+                card.addView(label("Giờ này: ${thisHour.optInt("earned",0)}/${thisHour.optInt("limit",200)} XU",14f,secondary))
+                c.addView(card,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(12)})
+                c.addView(label("🎯 Cách nhận XU",18f,dark,true))
+                c.addView(label("• Xem một sản phẩm đủ 30 giây → +10 XU\n• Xem đủ 10 sản phẩm khác nhau → +100 XU\n• Tối đa 200 XU mỗi giờ\n• Tối đa 2.000 XU mỗi ngày",14f,secondary))
+                c.addView(label("🎁 Đổi XU",18f,dark,true).apply{setPadding(0,dp(16),0,dp(6))})
 
-                c.addView(label("🎯 Cách nhận XU", 18f, dark, true))
-                c.addView(label(
-                    "• Xem 1 sản phẩm đủ ${settings.optInt("view_seconds", 30)} giây → +${settings.optInt("view_reward", 10)} XU\n" +
-                    "• Xem đủ 10 sản phẩm khác nhau trong ngày → +${settings.optInt("ten_products_reward", 100)} XU\n" +
-                    "• Tối đa ${thisHour.optInt("limit")} XU mỗi giờ, ${today.optInt("limit")} XU mỗi ngày",
-                    14f, secondary
-                ))
-
-                c.addView(label("🎁 Đổi XU", 18f, dark, true).apply { setPadding(0, dp(16), 0, dp(6)) })
-                val rewards = rewardsResp?.optJSONObject("data")?.optJSONArray("rewards")
-                if (rewards == null || rewards.length() == 0) {
-                    c.addView(label("Hiện chưa có phần thưởng nào để đổi.", 13f, secondary))
+                val rewardsOk = rewardsResult?.optBoolean("ok") == true
+                val rewards = rewardsResult?.optJSONObject("data")?.optJSONArray("rewards")
+                if (!rewardsOk || rewards == null || rewards.length() == 0) {
+                    c.addView(label("Chưa có phần thưởng nào để đổi.", 13f, secondary))
                 } else {
                     for (i in 0 until rewards.length()) {
-                        val rw = rewards.getJSONObject(i)
-                        val rewardId = rw.optInt("id"); val cost = rw.optInt("xu_cost"); val title = rw.optString("title")
-                        c.addView(ghostButton("$cost XU → $title") {
+                        val r = rewards.getJSONObject(i)
+                        val rewardId = r.optInt("id")
+                        val cost = r.optInt("xu_cost")
+                        val title = r.optString("title")
+                        c.addView(ghostButton("$cost XU → $title"){
                             executor.execute {
-                                val r = try { account.request("xu_redeem", "POST", JSONObject().put("reward_id", rewardId).toString()) } catch (_: Exception) { null }
+                                val redeemResult = try { xuApi.redeem(rewardId) } catch (_: Exception) { null }
                                 runOnUiThread {
-                                    if (r?.optBoolean("ok") == true) { toast("Đã đổi $title"); showXu() }
-                                    else toast(r?.optString("message")?.takeIf { it.isNotBlank() } ?: "Không đổi được, thử lại sau")
+                                    val rOk = redeemResult?.optBoolean("ok") == true
+                                    if (rOk) {
+                                        val code = redeemResult?.optJSONObject("data")?.optString("claim_code") ?: ""
+                                        toast(if (code.isNotBlank()) "Đã đổi \"$title\" — mã: $code" else "Đã đổi \"$title\"")
+                                        showXu()
+                                    } else {
+                                        toast(redeemResult?.optString("message")?.takeIf { it.isNotBlank() } ?: "Không đổi được XU lúc này")
+                                    }
                                 }
                             }
-                        }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(7) } })
+                        }.apply{layoutParams=LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(7)}})
                     }
                 }
             }
@@ -866,8 +887,12 @@ class MainActivity : SessionActivity() {
         executor.execute {
             try {
                 val r = account.request("profile")
-                val xuResp = try { account.request("xu_wallet") } catch (_: Exception) { null }
-                val xuBalance = xuResp?.takeIf { it.optBoolean("ok") }?.optJSONObject("data")?.optJSONObject("wallet")?.optInt("balance") ?: 0
+                // Lấy luôn số dư XU thật từ server (cùng lượt tải với hồ sơ) thay vì
+                // đọc bộ nhớ tạm trên máy — tránh hiển thị sai lệch với ví XU thật.
+                val xuResult = try { xuApi.wallet() } catch (_: Exception) { null }
+                val xuBalance = if (xuResult?.optBoolean("ok") == true) {
+                    xuResult.optJSONObject("data")?.optJSONObject("wallet")?.optInt("balance", 0) ?: 0
+                } else 0
                 runOnUiThread {
                     c.removeView(loadingView)
                     if (r.optBoolean("ok")) {
