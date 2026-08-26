@@ -321,7 +321,7 @@ class MainActivity : SessionActivity() {
         val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(11), 0, dp(6), 0) }
         info.addView(label(f.name, 17f, dark, true))
         if (f.description.isNotBlank()) info.addView(label(f.description, 13.5f, secondary))
-        info.addView(label("${money(f.price)}   •   còn ${f.stock} phần", 15f, primary, true))
+        info.addView(label("${money(f.price)}", 15f, primary, true)); info.addView(label("còn ${f.stock} phần", 13f, secondary))
         card.addView(info, LinearLayout.LayoutParams(0, -2, 1f))
         val actionBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
         val favBtn = TextView(this).apply {
