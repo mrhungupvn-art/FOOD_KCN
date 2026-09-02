@@ -1096,9 +1096,24 @@ class MainActivity : SessionActivity() {
 
     private fun input(hint: String, password: Boolean = false) = EditText(this).apply { this.hint = hint; textSize = 16f; setPadding(dp(12), dp(10), dp(12), dp(10)); if (password) inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD }
 
+    // BUGFIX/TÍNH NĂNG 02/09: thêm ô "Lưu mật khẩu cho lần sau" theo yêu cầu.
+    // Lưu ý: đây là lưu password THÔ vào SharedPreferences riêng của app
+    // (không chia sẻ được app khác đọc), giống cách app đã lưu last_address.
+    // Khách vẫn đăng nhập lại bình thường nếu không tick chọn.
+    private fun savedLoginPrefs() = getSharedPreferences("com11h_saved_login", MODE_PRIVATE)
+    private fun saveLoginCredentials(phone: String, pass: String) =
+        savedLoginPrefs().edit().putString("phone", phone).putString("password", pass).apply()
+    private fun clearLoginCredentials() = savedLoginPrefs().edit().clear().apply()
+    private fun savedPhone(): String = savedLoginPrefs().getString("phone", "") ?: ""
+    private fun savedPassword(): String = savedLoginPrefs().getString("password", "") ?: ""
+
     private fun showLogin() {
         val s = shell("Đăng nhập", 4); setContentView(s); val c = contentOf(s); val phone = input("Số điện thoại"); val pass = input("Mật khẩu", true); c.addView(phone); c.addView(pass)
-        c.addView(button("Đăng nhập") { val p = phone.text.toString().trim(); val pw = pass.text.toString(); if (p.isBlank() || pw.isBlank()) { toast("Vui lòng nhập đầy đủ thông tin"); return@button }; executor.execute { try { val r = account.request("login", "POST", JSONObject(mapOf("phone" to p, "password" to pw, "device" to "COM11H Android")).toString()); runOnUiThread { if (r.optBoolean("ok")) { account.saveToken(r.optJSONObject("data")?.optString("token", "") ?: ""); toast("Đăng nhập thành công"); showProfile() } else toast(r.optString("message", "Đăng nhập thất bại")) } } catch (_: Exception) { runOnUiThread { toast("Không kết nối được máy chủ tài khoản") } } } })
+        val hasSaved = savedPhone().isNotBlank()
+        if (hasSaved) { phone.setText(savedPhone()); pass.setText(savedPassword()) }
+        val rememberBox = CheckBox(this).apply { text = "Lưu mật khẩu cho lần đăng nhập sau"; textSize = 14f; isChecked = hasSaved }
+        c.addView(rememberBox.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) } })
+        c.addView(button("Đăng nhập") { val p = phone.text.toString().trim(); val pw = pass.text.toString(); if (p.isBlank() || pw.isBlank()) { toast("Vui lòng nhập đầy đủ thông tin"); return@button }; executor.execute { try { val r = account.request("login", "POST", JSONObject(mapOf("phone" to p, "password" to pw, "device" to "COM11H Android")).toString()); runOnUiThread { if (r.optBoolean("ok")) { account.saveToken(r.optJSONObject("data")?.optString("token", "") ?: ""); if (rememberBox.isChecked) saveLoginCredentials(p, pw) else clearLoginCredentials(); toast("Đăng nhập thành công"); showProfile() } else toast(r.optString("message", "Đăng nhập thất bại")) } } catch (_: Exception) { runOnUiThread { toast("Không kết nối được máy chủ tài khoản") } } } })
         c.addView(ghostButton("Quên mật khẩu?") { push({ showLogin() }) { showForgotPasswordPhone() } }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) } })
         c.addView(button("Đăng ký tài khoản mới") { push({ showLogin() }) { showRegister() } }.apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) } })
     }
