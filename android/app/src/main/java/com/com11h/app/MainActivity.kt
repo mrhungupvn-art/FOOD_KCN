@@ -846,7 +846,27 @@ class MainActivity : SessionActivity() {
                     }
                     pollRunnable = runnable
                     handler.postDelayed(runnable, 4000)
+                } else if (status == "Đang giao") {
+                    // BUGFIX 01/09: tự làm mới mỗi 4 giây trong lúc "Đang giao" để
+                    // mã OTP hiện ra ngay khi shipper bấm "Bắt đầu giao", khách
+                    // không cần thoát ra vào lại màn hình mới thấy.
+                    stopPolling()
+                    val runnable = object : Runnable {
+                        override fun run() { renderOrderDetail(box, code); handler.postDelayed(this, 4000) }
+                    }
+                    pollRunnable = runnable
+                    handler.postDelayed(runnable, 4000)
                 } else stopPolling()
+
+                // ---- MÃ OTP GIAO HÀNG (đọc cho tài xế khi nhận hàng) ----
+                val otpCode = o.optString("otp_code", "")
+                if (status == "Đang giao" && otpCode.isNotBlank() && otpCode != "null") {
+                    val otpBox = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL; background = bg(Color.parseColor("#FFFAEB"), 12); setPadding(dp(14), dp(12), dp(14), dp(12)) }
+                    otpBox.addView(label("🔑 Mã xác nhận giao hàng", 14f, dark, true))
+                    otpBox.addView(label(otpCode, 22f, Color.parseColor("#B54708"), true))
+                    otpBox.addView(label("Đọc mã này cho tài xế khi nhận hàng.", 12f, secondary))
+                    box.addView(otpBox, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+                }
 
                 // ---- XÁC NHẬN ĐÃ NHẬN HÀNG ----
                 if ((o.optInt("delivery_confirmed") == 1)) {
