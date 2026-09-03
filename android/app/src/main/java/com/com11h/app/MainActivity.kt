@@ -588,7 +588,7 @@ class MainActivity : SessionActivity() {
             setPadding(dp(12), dp(10), dp(12), dp(10)); background = bg(Color.WHITE, 12)
         }
         val note = EditText(this).apply {
-            hint = "Ghi chú cho quán (không bắt buộc)"; textSize = 15f
+            hint = " Số điện thoại người nhận hàng (bắt buộc)"; textSize = 15f
             setPadding(dp(12), dp(10), dp(12), dp(10)); background = bg(Color.WHITE, 12)
         }
         listOf(address, time, note).forEach { c.addView(it, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) }) }
