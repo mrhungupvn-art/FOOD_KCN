@@ -571,9 +571,11 @@ class MainActivity : SessionActivity() {
             background = bg(Color.rgb(255, 244, 230), 12)
             setPadding(dp(12), dp(10), dp(12), dp(10))
         }
-        noticeBox.addView(label("🚴 Lưu ý khoảng cách giao hàng", 14f, Color.rgb(180, 95, 6), true))
+        noticeBox.addView(label("🚴 Lưu Ý Quan Trọng", 16f, Color.rgb(180, 95, 6), true))
         noticeBox.addView(label(
-            "Phí vận chuyển được tính từ trung tâm KCN. Đơn từ 200.000đ và trong phạm vi 5km được FREE SHIP. Vui lòng ghi rõ số nhà, đường, phường/xã, tỉnh/thành để hệ thống xác định chính xác khoảng cách.",
+            "- Phí vận chuyển được tính từ trung tâm KCN.
+             - Vui lòng ghi rõ số nhà, đường, phường/xã, tỉnh/thành để hệ thống xác định chính xác khoảng cách.
+            - Thời gian giao hàng có thể sai lệch vì khách quan",
             12.5f, Color.rgb(120, 76, 20)
         ).apply { setPadding(0, dp(3), 0, 0) })
         c.addView(noticeBox, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8); bottomMargin = dp(10) })
@@ -584,7 +586,7 @@ class MainActivity : SessionActivity() {
             setPadding(dp(12), dp(10), dp(12), dp(10)); background = bg(Color.WHITE, 12)
         }
         val time = EditText(this).apply {
-            hint = "Giờ giao hàng mong muốn (bắt buộc)"; textSize = 15f
+            hint = "Giờ giao hàng (ví dụ : 11h30 ,bắt buộc)"; textSize = 15f
             setPadding(dp(12), dp(10), dp(12), dp(10)); background = bg(Color.WHITE, 12)
         }
         val note = EditText(this).apply {
