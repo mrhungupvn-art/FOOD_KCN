@@ -89,12 +89,27 @@ app 1.4.1 thì ảnh mới hiển thị đúng (xem HUONG_DAN_UPLOAD.txt).
 3. Use Gradle 8.9 (AGP 8.7.3), JDK 17, compileSdk/targetSdk 36.
 4. Sync Gradle and run the `app` configuration on the phone.
 
-## Build APK from GitHub
+## Build signed AAB from GitHub
 The repository root includes `.github/workflows/build-android.yml`.
-After pushing to `main`, GitHub Actions builds:
-`android/app/build/outputs/apk/debug/app-debug.apk`
+It builds a **signed release App Bundle** (not a debug APK) whenever code is
+pushed to `main`, or when run manually via Actions > "Run workflow".
 
-The APK is published as the workflow artifact `COM11H-Android-v1.4.1-debug`.
+Before it can sign the build, add these 4 repository secrets (Settings >
+Secrets and variables > Actions):
+- `KEYSTORE_BASE64` — base64 of your `.jks` file (`base64 -w0 com11h-release.jks`)
+- `KEYSTORE_PASSWORD`
+- `KEY_ALIAS`
+- `KEY_PASSWORD`
+
+(See `HUONG_DAN_KY_APP.md` for how to create the keystore first.)
+
+Output: `android/app/build/outputs/bundle/release/app-release.aab`,
+published as the workflow artifact `FOOD-KCN-v1.8.1-release-AAB`
+(bump the version number in this doc — and in the artifact `name:` in the
+workflow file — whenever `versionName` changes in `app/build.gradle`).
+
+If the secrets are missing, the workflow fails fast with a clear error
+instead of producing an unsigned/broken bundle.
 
 ## Verified business flow to preserve
 Login -> Menu (with food images) -> Cart (with thumbnails) -> Order Preview -> Create Order -> QR -> Payment (auto-hide QR + refresh points on paid) -> Stock reduction -> Delivery -> Customer delivery confirmation -> Points/Lucky Code -> Order list (6-column card matching web's account.php).
