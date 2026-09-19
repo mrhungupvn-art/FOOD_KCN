@@ -44,12 +44,24 @@ jobs:
 
       - name: Verify release signing configuration
         working-directory: android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS_SECRET: ${{ secrets.KEY_ALIAS }}
         run: |
           if [ ! -f keystore.properties ]; then
             echo "ERROR: Missing GitHub Secrets KEYSTORE_BASE64/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD"
             exit 1
           fi
           test -s com11h-release.jks || { echo "ERROR: release keystore is empty"; exit 1; }
+
+          echo "Available aliases in release keystore:"
+          keytool -list -keystore com11h-release.jks -storepass "$KEYSTORE_PASSWORD" 2>/dev/null | sed -n '1,20p' || true
+
+          if ! keytool -list -keystore com11h-release.jks -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS_SECRET" >/dev/null 2>&1; then
+            echo "ERROR: KEY_ALIAS does not exist in the supplied release keystore."
+            echo "The keystore is valid, but GitHub Secret KEY_ALIAS does not match an alias in it."
+            exit 1
+          fi
 
       - name: Build signed release AAB
         working-directory: android
