@@ -1,4 +1,4 @@
-name: Build FOOD KCN Release
+name: Build FOOD KCN Customer APK
 
 on:
   workflow_dispatch:
@@ -10,6 +10,7 @@ on:
 jobs:
   build-release:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,6 +27,19 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Verify Customer App
+        working-directory: android
+        run: |
+          echo "Checking FOOD KCN Customer application..."
+
+          if ! grep -R "com.foodkcn.app" app/build.gradle app/build.gradle.kts app/src/main/AndroidManifest.xml 2>/dev/null; then
+            echo "ERROR: Customer package com.foodkcn.app was not found."
+            echo "This repository does not appear to be the FOOD KCN Customer app."
+            exit 1
+          fi
+
+          echo "OK: Customer package com.foodkcn.app found."
+
       - name: Prepare release keystore
         working-directory: android
         env:
@@ -35,6 +49,7 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > com11h-release.jks
+
           cat > keystore.properties <<EOF
           storeFile=../com11h-release.jks
           storePassword=$KEYSTORE_PASSWORD
@@ -52,12 +67,23 @@ jobs:
             echo "ERROR: Missing GitHub Secrets KEYSTORE_BASE64/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD"
             exit 1
           fi
-          test -s com11h-release.jks || { echo "ERROR: release keystore is empty"; exit 1; }
+
+          test -s com11h-release.jks || {
+            echo "ERROR: release keystore is empty"
+            exit 1
+          }
 
           echo "Available aliases in release keystore:"
-          keytool -list -keystore com11h-release.jks -storepass "$KEYSTORE_PASSWORD" 2>/dev/null | sed -n '1,20p' || true
+          keytool -list \
+            -keystore com11h-release.jks \
+            -storepass "$KEYSTORE_PASSWORD" \
+            2>/dev/null | sed -n '1,20p' || true
 
-          if ! keytool -list -keystore com11h-release.jks -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS_SECRET" >/dev/null 2>&1; then
+          if ! keytool -list \
+            -keystore com11h-release.jks \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -alias "$KEY_ALIAS_SECRET" >/dev/null 2>&1; then
+
             echo "ERROR: KEY_ALIAS does not exist in the supplied release keystore."
             echo "The keystore is valid, but GitHub Secret KEY_ALIAS does not match an alias in it."
             exit 1
@@ -69,13 +95,28 @@ jobs:
 
       - name: Verify APK
         run: |
-          test -s android/app/build/outputs/apk/release/app-release.apk
-          ls -lh android/app/build/outputs/apk/release/app-release.apk
+          APK="android/app/build/outputs/apk/release/app-release.apk"
 
-      - name: Upload signed APK
+          test -s "$APK" || {
+            echo "ERROR: Customer APK was not generated."
+            exit 1
+          }
+
+          echo "Customer APK successfully generated:"
+          ls -lh "$APK"
+
+      - name: Verify APK package
+        working-directory: android
+        run: |
+          echo "Verifying APK package..."
+
+          $ANDROID_HOME/build-tools/35.0.0/aapt dump badging \
+            app/build/outputs/apk/release/app-release.apk | head -n 1
+
+      - name: Upload signed Customer APK
         uses: actions/upload-artifact@v4
         with:
-          name: FOOD-KCN-v1.8.1-release-APK
+          name: FOOD-KCN-Customer-v1.8.1-release-APK
           path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
