@@ -63,20 +63,20 @@ jobs:
             exit 1
           fi
 
-      - name: Build signed release AAB
+      - name: Build signed release APK
         working-directory: android
-        run: gradle --no-daemon clean bundleRelease
+        run: gradle --no-daemon clean assembleRelease
 
-      - name: Verify AAB
+      - name: Verify APK
         run: |
-          test -s android/app/build/outputs/bundle/release/app-release.aab
-          ls -lh android/app/build/outputs/bundle/release/app-release.aab
+          test -s android/app/build/outputs/apk/release/app-release.apk
+          ls -lh android/app/build/outputs/apk/release/app-release.apk
 
-      - name: Upload signed AAB
+      - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: FOOD-KCN-v1.8.1-release-AAB
-          path: android/app/build/outputs/bundle/release/app-release.aab
+          name: FOOD-KCN-v1.8.1-release-APK
+          path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
 
