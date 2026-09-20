@@ -1,7 +1,5 @@
 package com.foodkcn.app
 
-import android.Manifest
-import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Bundle
 import android.view.View
@@ -31,18 +29,11 @@ class WebActivity : SessionActivity() {
     private val executor = Executors.newSingleThreadExecutor()
     private lateinit var webView: WebView
     private lateinit var progressBar: ProgressBar
-    private var pendingTargetUrl: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         buildView()
-        val targetUrl = intent.getStringExtra("url") ?: "https://com11h.com/menu.php"
-        if (needsLocationPermission()) {
-            pendingTargetUrl = targetUrl
-            requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 7001)
-        } else {
-            openWeb(targetUrl)
-        }
+        openWeb(intent.getStringExtra("url") ?: "https://com11h.com/menu.php")
     }
 
     override fun onDestroy() {
@@ -50,21 +41,6 @@ class WebActivity : SessionActivity() {
         webView.destroy()
         executor.shutdownNow()
         super.onDestroy()
-    }
-
-    private fun needsLocationPermission(): Boolean {
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.M) return false
-        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
-            checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
-    }
-
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 7001) {
-            val target = pendingTargetUrl
-            pendingTargetUrl = null
-            if (target != null) openWeb(target)
-        }
     }
 
     private fun buildView() {
@@ -89,13 +65,7 @@ class WebActivity : SessionActivity() {
                     progressBar.visibility = View.GONE
                 }
             }
-            webChromeClient = object : WebChromeClient() {
-                override fun onGeolocationPermissionsShowPrompt(origin: String?, callback: android.webkit.GeolocationPermissions.Callback?) {
-                    val fine = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                    val coarse = checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                    callback?.invoke(origin, fine || coarse, false)
-                }
-            }
+            webChromeClient = WebChromeClient()
         }
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false)
