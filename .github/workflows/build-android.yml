@@ -63,20 +63,33 @@ jobs:
             exit 1
           fi
 
-      - name: Build signed release AAB
+      - name: Build signed release AAB + APK
         working-directory: android
-        run: gradle --no-daemon clean bundleRelease
+        # bundleRelease -> .aab (nộp Google Play); assembleRelease -> .apk
+        # (cài trực tiếp / phát ngoài Play Store). Cùng 1 signingConfig nên
+        # cả hai file được ký bằng đúng 1 keystore ở trên.
+        run: gradle --no-daemon clean bundleRelease assembleRelease
 
-      - name: Verify AAB
+      - name: Verify AAB + APK
         run: |
           test -s android/app/build/outputs/bundle/release/app-release.aab
+          test -s android/app/build/outputs/apk/release/app-release.apk
           ls -lh android/app/build/outputs/bundle/release/app-release.aab
+          ls -lh android/app/build/outputs/apk/release/app-release.apk
 
       - name: Upload signed AAB
         uses: actions/upload-artifact@v4
         with:
           name: FOOD-KCN-v1.8.1-release-AAB
           path: android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload signed APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: FOOD-KCN-v1.8.1-release-APK
+          path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
 
