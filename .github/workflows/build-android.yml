@@ -27,24 +27,22 @@ jobs:
         with:
           gradle-version: '8.9'
 
-- name: Check FOOD KCN Customer application
-  run: |
-    echo "Checking FOOD KCN Customer application..."
+      - name: Check FOOD KCN Customer application
+        run: |
+          echo "Checking FOOD KCN Customer application..."
 
-    if [ ! -f "app/build.gradle" ]; then
-      echo "ERROR: app/build.gradle was not found."
-      exit 1
-    fi
+          if [ ! -f "app/build.gradle" ]; then
+            echo "ERROR: app/build.gradle was not found."
+            exit 1
+          fi
 
-    if grep -q "com.foodkcn.app" app/build.gradle; then
-      echo "OK: Customer package com.foodkcn.app found."
-    else
-      echo "ERROR: Customer package com.foodkcn.app was not found."
-      echo "This repository does not appear to be the FOOD KCN Customer app."
-      exit 1
-    fi
-
-          echo "OK: Customer package com.foodkcn.app found."
+          if grep -q "com.foodkcn.app" app/build.gradle; then
+            echo "OK: Customer package com.foodkcn.app found."
+          else
+            echo "ERROR: Customer package com.foodkcn.app was not found."
+            echo "This repository does not appear to be the FOOD KCN Customer app."
+            exit 1
+          fi
 
       - name: Prepare release keystore
         working-directory: android
@@ -80,6 +78,7 @@ jobs:
           }
 
           echo "Available aliases in release keystore:"
+
           keytool -list \
             -keystore com11h-release.jks \
             -storepass "$KEYSTORE_PASSWORD" \
