@@ -807,6 +807,7 @@ class MainActivity : SessionActivity() {
                             .put("note", note.text.toString().trim())
                             .put("items", itemsJson())
                             .put("xu_use", xuUse)
+                            .put("payment_method", if (codPay.isChecked) "cod" else "online")
                             .toString()
                         executor.execute {
                             val cr = account.request("create_order", "POST", orderBody, mapOf("X-Idempotency-Key" to idem))
@@ -826,6 +827,20 @@ class MainActivity : SessionActivity() {
                 }
             }
         }
+        val paymentGroup = RadioGroup(this).apply {
+            orientation = RadioGroup.VERTICAL
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            background = bg(Color.WHITE, 12)
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8); bottomMargin = dp(6) }
+        }
+        val onlinePay = RadioButton(this).apply { text = "💳 Thanh toán chuyển khoản / quét QR"; textSize = 15f; isChecked = true }
+        val codPay = RadioButton(this).apply { text = "💵 Thanh toán khi nhận hàng (COD)"; textSize = 15f }
+        paymentGroup.addView(onlinePay); paymentGroup.addView(codPay)
+        c.addView(paymentGroup)
+        val paymentHint = label("Thanh toán online: tiền chuyển vào tài khoản FOOD KCN. COD: thanh toán tiền hàng cho Shipper khi nhận.", 12.5f, secondary).apply {
+            setPadding(dp(12), 0, dp(12), dp(6))
+        }
+        c.addView(paymentHint)
         c.addView(previewBtn, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
     }
 
