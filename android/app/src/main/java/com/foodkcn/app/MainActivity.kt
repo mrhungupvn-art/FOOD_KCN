@@ -675,6 +675,13 @@ class MainActivity : SessionActivity() {
             return arr
         }
 
+        val paymentTitle = label("💳 Phương thức thanh toán", 16f, dark, true)
+        val paymentSpinner = Spinner(this)
+        val paymentOptions = listOf("Chuyển khoản / Quét QR", "Thanh toán khi nhận hàng (COD)")
+        paymentSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, paymentOptions).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        c.addView(paymentTitle, LinearLayout.LayoutParams(-1,-2).apply { topMargin=dp(4) })
+        c.addView(paymentSpinner, LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(10) })
+
         val previewBtn = button("Xem lại tổng tiền") {
             if (address.text.toString().trim().isBlank()) { toast("Vui lòng nhập địa chỉ giao hàng"); return@button }
             if (time.text.toString().trim().isBlank()) { toast("Vui lòng nhập giờ giao hàng"); return@button }
@@ -686,6 +693,7 @@ class MainActivity : SessionActivity() {
                     .put("address", address.text.toString().trim())
                     .put("kcn_id", KcnStore.id(this))
                     .put("items", itemsJson())
+                    .put("payment_method", if (paymentSpinner.selectedItemPosition == 1) "cod" else "online")
                     .toString()
                 val r = account.request("order_preview", "POST", body)
                 val data = r.optJSONObject("data") ?: JSONObject()
@@ -794,6 +802,9 @@ class MainActivity : SessionActivity() {
                         override fun afterTextChanged(s: android.text.Editable?) = Unit
                     })
 
+                    val selectedPaymentText = if (paymentSpinner.selectedItemPosition == 1) "💵 COD — thanh toán khi nhận hàng" else "💳 Chuyển khoản / Quét QR"
+                    summaryBox.addView(label("Phương thức: $selectedPaymentText", 15f, dark, true).apply { setPadding(0, dp(4), 0, dp(4)) })
+
                     summaryBox.addView(button("✅ Đặt hàng ngay") {
                         if (time.text.toString().trim().isBlank()) { toast("Vui lòng nhập giờ giao hàng"); return@button }
                         val xuUse = selectedXu()
@@ -807,7 +818,7 @@ class MainActivity : SessionActivity() {
                             .put("note", note.text.toString().trim())
                             .put("items", itemsJson())
                             .put("xu_use", xuUse)
-                            .put("payment_method", if (codPay.isChecked) "cod" else "online")
+                            .put("payment_method", if (paymentSpinner.selectedItemPosition == 1) "cod" else "online")
                             .toString()
                         executor.execute {
                             val cr = account.request("create_order", "POST", orderBody, mapOf("X-Idempotency-Key" to idem))
@@ -827,20 +838,6 @@ class MainActivity : SessionActivity() {
                 }
             }
         }
-        val paymentGroup = RadioGroup(this).apply {
-            orientation = RadioGroup.VERTICAL
-            setPadding(dp(12), dp(8), dp(12), dp(8))
-            background = bg(Color.WHITE, 12)
-            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8); bottomMargin = dp(6) }
-        }
-        val onlinePay = RadioButton(this).apply { text = "💳 Thanh toán chuyển khoản / quét QR"; textSize = 15f; isChecked = true }
-        val codPay = RadioButton(this).apply { text = "💵 Thanh toán khi nhận hàng (COD)"; textSize = 15f }
-        paymentGroup.addView(onlinePay); paymentGroup.addView(codPay)
-        c.addView(paymentGroup)
-        val paymentHint = label("Thanh toán online: tiền chuyển vào tài khoản FOOD KCN. COD: thanh toán tiền hàng cho Shipper khi nhận.", 12.5f, secondary).apply {
-            setPadding(dp(12), 0, dp(12), dp(6))
-        }
-        c.addView(paymentHint)
         c.addView(previewBtn, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
     }
 
@@ -912,8 +909,12 @@ class MainActivity : SessionActivity() {
                 }
                 box.addView(label("Tổng cộng: ${money(o.optInt("total"))}", 18f, primary, true).apply { setPadding(0, dp(10), 0, dp(4)) })
 
-                // ---- THANH TOÁN QR (VietQR chuyển khoản ngân hàng) ----
-                if (payStatus != "paid" && payment != null) {
+                // ---- THANH TOÁN ----
+                val paymentMethod = o.optString("payment_method", "online")
+                if (paymentMethod == "cod" && payStatus != "paid") {
+                    box.addView(label("💵 Thanh toán khi nhận hàng (COD)", 15f, dark, true).apply { setPadding(0, dp(8), 0, dp(4)) })
+                    box.addView(label("Bạn thanh toán tiền hàng cho Shipper khi nhận hàng. Nếu Shipper hiển thị QR, tiền sẽ chuyển thẳng về tài khoản Admin.", 12.5f, secondary))
+                } else if (payStatus != "paid" && payment != null) {
                     val payBox = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; background = bg(Color.WHITE, 16); setPadding(dp(14), dp(14), dp(14), dp(14)) }
                     payBox.addView(label("💳 Quét mã để thanh toán", 16f, dark, true))
                     val qr = ImageView(this@MainActivity).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
