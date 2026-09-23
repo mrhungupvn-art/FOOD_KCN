@@ -1,4 +1,4 @@
-# Hướng dẫn tạo chữ ký (keystore) & build file AAB nộp CH Play
+# FOOD KCN — Hướng dẫn tạo chữ ký (keystore) & build AAB nộp CH Play
 
 ## 1. Tạo file keystore (chỉ làm 1 lần, giữ file này MÃI MÃI)
 Mở terminal trong Android Studio (hoặc cmd/terminal máy bạn, cần có JDK), chạy:
