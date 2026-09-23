@@ -17,7 +17,7 @@ import org.json.JSONObject
 import java.util.concurrent.Executors
 
 /**
- * Trang chủ COM11H. "Món ăn phổ biến" lấy trực tiếp từ api?action=menu (cùng
+ * Trang chủ FOOD KCN. "Món ăn phổ biến" lấy trực tiếp từ api?action=menu (cùng
  * dữ liệu với web) qua AccountSync — không còn danh sách món ăn giả lập.
  * Banner ở giữa trang và ô tìm kiếm cũng đồng bộ trực tiếp với server:
  *   - Banner: lấy từ api?action=banners, cùng dữ liệu Admin > Banner trang
@@ -198,7 +198,7 @@ class HomeActivity : SessionActivity() {
         root.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(primary, accent, Color.rgb(232, 245, 233)))
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(dp(28), dp(30), dp(28), dp(30)) }
         box.addView(ImageView(this).apply { setImageResource(R.drawable.com11h_logo); scaleType = ImageView.ScaleType.FIT_CENTER }, LinearLayout.LayoutParams(dp(230), dp(230)))
-        box.addView(TextView(this).apply { text = "Cơm 11h"; textSize = 48f; setTextColor(Color.WHITE); setTypeface(null, Typeface.BOLD_ITALIC); gravity = Gravity.CENTER })
+        box.addView(TextView(this).apply { text = "FOOD KCN"; textSize = 48f; setTextColor(Color.WHITE); setTypeface(null, Typeface.BOLD_ITALIC); gravity = Gravity.CENTER })
         box.addView(TextView(this).apply { text = "xin chào quý khách ❤️"; textSize = 27f; setTextColor(Color.WHITE); setTypeface(null, Typeface.BOLD); gravity = Gravity.CENTER; setPadding(0, dp(3), 0, dp(20)) })
         box.addView(TextView(this).apply { text = "Ngon mỗi ngày • Nóng hổi • Giao tận nơi"; textSize = 15f; setTextColor(Color.WHITE); gravity = Gravity.CENTER })
         root.addView(box, FrameLayout.LayoutParams(-1, -2, Gravity.CENTER))

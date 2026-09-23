@@ -41,7 +41,7 @@ object DistanceHelper {
                 connectTimeout = 10000
                 readTimeout = 10000
                 // Nominatim yêu cầu User-Agent hợp lệ cho mỗi request.
-                setRequestProperty("User-Agent", "Com11hApp/1.0 (delivery-distance-check)")
+                setRequestProperty("User-Agent", "FoodKCNApp/1.0 (delivery-distance-check)")
             }
             val code = c.responseCode
             val text = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() }
