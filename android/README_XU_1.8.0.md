@@ -1,4 +1,4 @@
-# COM11H 1.8.0 — XU & Chăm sóc khách hàng
+# FOOD KCN 1.8.0 — XU & Chăm sóc khách hàng
 
 ## Cơ chế XU
 - Xem một sản phẩm đủ 30 giây: +10 XU.
