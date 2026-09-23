@@ -66,7 +66,7 @@
 ## Ghi chú bản 1.4.2 (so với 1.4.1)
 Chỉnh giao diện thẻ món ăn ở màn Thực đơn theo yêu cầu:
   - Ô ảnh to hơn: 88dp -> 128dp.
-  - Logo COM11H nhỏ (26dp) ở góc trên-trái mỗi ảnh món.
+  - Logo FOOD KCN nhỏ (26dp) ở góc trên-trái mỗi ảnh món.
   - Bấm vào ảnh món -> mở hộp thoại xem ảnh cỡ lớn (bấm "Đóng" hoặc
     bấm vào ảnh để tắt).
   - Nút "+ Thêm": cỡ chữ giảm còn một nửa (16f -> 8f), nền đổi sang
