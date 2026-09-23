@@ -2,7 +2,7 @@
 
 ## Code changes in this package
 - Target/compile SDK 36.
-- versionCode 14 / versionName 1.8.1.
+- versionCode 15 / versionName 1.8.1.
 - Added in-app account/data deletion request flow (`delete_account`).
 - Added in-app privacy/data explanation screen.
 - Removed plaintext password persistence; only the phone number is remembered.
