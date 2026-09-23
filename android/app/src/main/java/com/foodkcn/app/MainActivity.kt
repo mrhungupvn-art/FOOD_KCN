@@ -20,7 +20,7 @@ import java.util.UUID
 import java.util.concurrent.Executors
 
 /**
- * COM11H app — toàn bộ dữ liệu thực đơn, đơn hàng, thanh toán, quay số may
+ * FOOD KCN app — toàn bộ dữ liệu thực đơn, đơn hàng, thanh toán, quay số may
  * mắn và tài khoản được đồng bộ TRỰC TIẾP với com11h.com qua api/index.php
  * (dùng chung logic nghiệp vụ với web qua core.php, xem AccountSync.kt).
  * Chỉ có giỏ hàng (trước khi đặt) là lưu tạm trên máy.
