@@ -1,0 +1,64 @@
+name: Create FOOD KCN Upload Key
+
+on:
+  workflow_dispatch:
+
+jobs:
+  create-upload-key:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Generate Upload Keystore
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.NEW_UPLOAD_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.NEW_UPLOAD_KEY_PASSWORD }}
+        run: |
+          set -e
+
+          keytool -genkeypair \
+            -v \
+            -keystore foodkcn-upload-key.jks \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -alias foodkcn_upload \
+            -keypass "$KEY_PASSWORD" \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=FOOD KCN, OU=Android, O=FOOD KCN, L=Vietnam, ST=Dong Thap, C=VN"
+
+          echo "=== SHA-256 Upload Key Certificate ==="
+
+          keytool -list \
+            -v \
+            -keystore foodkcn-upload-key.jks \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -alias foodkcn_upload \
+            | grep -A 1 "SHA256:"
+
+      - name: Export Upload Certificate PEM
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.NEW_UPLOAD_KEYSTORE_PASSWORD }}
+        run: |
+          set -e
+
+          keytool -exportcert \
+            -rfc \
+            -keystore foodkcn-upload-key.jks \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -alias foodkcn_upload \
+            -file upload_certificate.pem
+
+      - name: Upload generated key files
+        uses: actions/upload-artifact@v4
+        with:
+          name: FOOD-KCN-NEW-UPLOAD-KEY
+          path: |
+            foodkcn-upload-key.jks
+            upload_certificate.pem
+          retention-days: 7
